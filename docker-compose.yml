@@ -1,0 +1,16 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  nodejs-app:
+    command: node app.js
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nodejs_app_container
+    ports:
+      - '3000:3000'
+    environment:
+      # URI kết nối tới MongoDB Atlas
+      MONGO_URI: 'mongodb+srv://chiennth225602:x3p2zTN9sNCWhmZO@cluster0.xfy34dr.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0'
+    restart: always
