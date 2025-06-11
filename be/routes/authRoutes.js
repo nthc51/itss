@@ -62,37 +62,38 @@ router.post('/register', async (req, res) => {
 
 // --- ROUTE ĐĂNG NHẬP (LOGIN) ---
 router.post('/login', async (req, res) => {
-    const { username, password } = req.body;
+    // Thay vì username, bây giờ chúng ta sẽ lấy email từ request body
+    const { email, password } = req.body; // Lấy email và password
 
     // 1. Kiểm tra đầu vào bắt buộc
-    if (!username || !password) {
-        return res.status(400).json({ message: 'Vui lòng điền Tên người dùng và Mật khẩu.' });
+    if (!email || !password) { // Kiểm tra email và password
+        return res.status(400).json({ message: 'Vui lòng điền Email và Mật khẩu.' });
     }
 
     try {
-        // 2. Tìm người dùng theo tên đăng nhập
-        const user = await User.findOne({ username });
+        // 2. Tìm người dùng theo EMAIL
+        const user = await User.findOne({ email }); // THAY ĐỔI: Tìm bằng 'email' thay vì 'username'
 
         if (!user) {
-            return res.status(401).json({ message: 'Tên người dùng hoặc mật khẩu không đúng.' });
+            // Cập nhật thông báo lỗi để phù hợp với việc đăng nhập bằng email
+            return res.status(401).json({ message: 'Email hoặc mật khẩu không đúng.' });
         }
 
         // 3. So sánh mật khẩu đã cung cấp với mật khẩu đã mã hóa trong DB
         const isMatch = await bcrypt.compare(password, user.password);
 
         if (!isMatch) {
-            return res.status(401).json({ message: 'Tên người dùng hoặc mật khẩu không đúng.' });
+            // Cập nhật thông báo lỗi
+            return res.status(401).json({ message: 'Email hoặc mật khẩu không đúng.' });
         }
 
         // 4. Đăng nhập thành công
-        // TRONG ỨNG DỤNG THỰC TẾ: Tại đây, bạn sẽ tạo và gửi một JSON Web Token (JWT)
-        // hoặc thiết lập một phiên (session) để duy trì trạng thái đăng nhập.
-        console.log(`Người dùng ${username} đã đăng nhập thành công.`);
+        console.log(`Người dùng ${user.username} đã đăng nhập thành công bằng email: ${user.email}.`);
         res.status(200).json({
             message: `Đăng nhập thành công! Chào mừng, ${user.fullName}!`,
             user: {
                 id: user._id,
-                username: user.username,
+                username: user.username, // Vẫn trả về username
                 fullName: user.fullName,
                 email: user.email,
                 role: user.role
