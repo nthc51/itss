@@ -9,8 +9,8 @@ services:
       dockerfile: Dockerfile
     container_name: nodejs_app_container
     ports:
-      - '3000:3000'
+      - '3001:3001'
     environment:
       # URI kết nối tới MongoDB Atlas
-      MONGO_URI: 'mongodb+srv://chiennth225602:x3p2zTN9sNCWhmZO@cluster0.xfy34dr.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0'
+      MONGO_URI: 'mongodb+srv://chiennth225602:aavM2vL8NVqUoD6R@cluster0.zyeqztw.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0'
     restart: always

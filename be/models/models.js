@@ -5,7 +5,7 @@ const { Schema, model, Types } = mongoose;
 /**
  * 1. ENUMS (as plain JS arrays for validation)
  */
-const ROLE_TYPES = ['HOMEMAKER', 'FAMILY_MEMBER', 'ADMIN'];
+const ROLE_TYPES = ['HOMEMAKER', 'FAMILY_MEMBER', 'ADMIN', 'GUEST'];
 const PURCHASE_STATUS = ['PENDING', 'BOUGHT'];
 const PLAN_TYPES = ['DAILY', 'WEEKLY'];
 const REPORT_TYPES = ['PURCHASE_TREND', 'WASTE_STATISTICS', 'CONSUMPTION_ANALYSIS'];
@@ -25,6 +25,8 @@ const userSchema = new Schema(
   },
   { timestamps: true }
 );
+
+
 
 // 2.2. Admin is a special User (just another document with role = 'ADMIN').
 //     If you want a separate model, you can use discriminate(), but usually
@@ -133,7 +135,7 @@ const mealPlanSchema = new Schema(
   {
     date: { type: Date, required: true },
     type: { type: String, required: true, enum: PLAN_TYPES, default: 'DAILY' },
-    recipes: [{ type: Types.ObjectId, ref: 'Recipe' }], 
+    recipes: [{ type: Types.ObjectId, ref: 'Recipe' }],
     createdBy: { type: Types.ObjectId, ref: 'User', required: true },
   },
   { timestamps: true }
