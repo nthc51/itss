@@ -11,7 +11,7 @@ const bodyParser = require('body-parser'); // import body-parser de xu ly json t
 const { User } = require('./models/models');
 
 const app = express(); // khoi tao ung dung express
-const PORT = 3000; // dinh nghia cong cho server
+const PORT = 3001; // dinh nghia cong cho server
 
 // middleware: su dung body-parser de phan tich request body dang json
 app.use(bodyParser.json());
