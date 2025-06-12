@@ -1,103 +1,77 @@
-require("dotenv").config(); // Load environment variables
-const mongoose = require("mongoose");
-mongoose.set("strictQuery", true);
+// server.js
+const express = require('express');
+const dotenv = require('dotenv');
+const colors = require('colors'); // Make sure to 'npm install colors'
+const connectDB = require('./config/db');
+const cors = require('cors'); // Make sure to 'npm install cors'
 
-const express = require("express");
-const cors = require("cors"); // CORS middleware
-const bodyParser = require("body-parser"); // To parse JSON in request bodies
-const bcrypt = require("bcryptjs"); // For hashing dummy user password
+// Load environment variables from .env file
+dotenv.config({ path: './config/config.env' }); // Assuming .env is in be/config/
 
-// Import models
-const { User } = require("./models/models");
+// Connect to MongoDB database
+connectDB();
 
+// Initialize Express application
 const app = express();
-const PORT = process.env.PORT || 3001;
 
+// Middleware: Body parser to read JSON from request body
+app.use(express.json());
+
+// Middleware: Enable CORS (allows frontend from different domains to access backend)
+app.use(cors());
+
+// Import route files for each resource
+const authRoutes = require('./routes/authRoutes');
+const userRoutes = require('./routes/userRoutes');
+const foodCategoryRoutes = require('./routes/foodCategoryRoutes');
+const unitRoutes = require('./routes/unitRoutes');
+const familyGroupRoutes = require('./routes/familyGroupRoutes');
+const shoppingListRoutes = require('./routes/shoppingListRoutes');
+const pantryItemRoutes = require('./routes/pantryItemRoutes');
+const recipeRoutes = require('./routes/recipeRoutes');
+const mealPlanRoutes = require('./routes/mealPlanRoutes');
+const weeklyPlanRoutes = require('./routes/weeklyPlanRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
+const reportRoutes = require('./routes/reportRoutes');
+const suggestionRoutes = require('./routes/suggestionRoutes');
+
+// Mount routes to the application with API prefix
+app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/food-categories', foodCategoryRoutes);
+app.use('/api/units', unitRoutes);
+app.use('/api/family-groups', familyGroupRoutes);
+app.use('/api/shopping-lists', shoppingListRoutes);
+app.use('/api/pantry-items', pantryItemRoutes);
+app.use('/api/recipes', recipeRoutes);
+app.use('/api/meal-plans', mealPlanRoutes);
+app.use('/api/weekly-plans', weeklyPlanRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/reports', reportRoutes);
+app.use('/api/suggestions', suggestionRoutes);
+
+// Middleware for handling 404 Not Found routes
 app.use((req, res, next) => {
-  console.log(`→ ${req.method} ${req.url}`);
-  next();
+  res.status(404).json({ success: false, error: 'API endpoint not found' });
 });
 
-// Enable CORS for requests from your React front-end on localhost:3000
-app.use(
-  cors({
-    origin: "http://localhost:3000",
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    credentials: true, // Allow cookies/auth headers if needed
-  })
-);
-
-// Parse JSON bodies
-app.use(bodyParser.json());
-
-// MongoDB connection URI
-const DB_URI =
-  process.env.MONGO_URI || "mongodb://localhost:27017/kitchen_app_db";
-
-mongoose
-  .connect(DB_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
-  .then(() => {
-    console.log("Connected to MongoDB");
-    app.listen(PORT, () => {
-      console.log(`Server is running on port ${PORT}`);
-      console.log(`Access your application at: http://localhost:${PORT}`);
-    });
-
-    // ********** Dummy user initialization (for testing) **********
-    const createDummyUser = async () => {
-      const dummyUsername = "testuser";
-      const dummyEmail = "test@example.com";
-      const dummyPassword = "testpassword";
-      const dummyFullName = "Test User";
-      const dummyRole = "HOMEMAKER";
-
-      try {
-        const existingUser = await User.findOne({
-          $or: [{ username: dummyUsername }, { email: dummyEmail }],
-        });
-        if (!existingUser) {
-          const salt = await bcrypt.genSalt(10);
-          const hashedPassword = await bcrypt.hash(dummyPassword, salt);
-
-          const newUser = new User({
-            username: dummyUsername,
-            password: hashedPassword,
-            fullName: dummyFullName,
-            email: dummyEmail,
-            role: dummyRole,
-          });
-          await newUser.save();
-          console.log('Dummy user "testuser" created with hashed password!');
-        } else {
-          console.log('Dummy user "testuser" already exists.');
-        }
-      } catch (err) {
-        console.error("Error creating/checking dummy user:", err);
-      }
-    };
-    createDummyUser();
-    // ************************************************************
-  })
-  .catch((err) => {
-    console.error("MongoDB connection error:", err);
-    process.exit(1);
+// Global error handling middleware
+// Catches errors from async functions in controllers and other errors
+app.use((err, req, res, next) => {
+  console.error(err.stack.red);
+  const statusCode = err.statusCode || 500;
+  res.status(statusCode).json({
+    success: false,
+    error: err.message || 'Internal server error',
+    // stack: process.env.NODE_ENV === 'development' ? err.stack : {} // Show stack only in development mode
   });
+});
 
-// Import route modules
-const shoppingListRoutes = require("./routes/shoppingListRoutes");
-const pantryItemRoutes = require("./routes/pantryItemRoutes");
-const recipeRoutes = require("./routes/recipeRoutes");
-const mealPlanRoutes = require("./routes/mealPlanRoutes");
-const authRoutes = require("./routes/authRoutes"); // Auth routes (register, login)
+// Define the port for the server to listen on
+const PORT = process.env.PORT || 5000;
 
-// Mount routers under /api
-app.use("/api/shopping-lists", shoppingListRoutes);
-app.use("/api/pantry-items", pantryItemRoutes);
-app.use("/api/recipes", recipeRoutes);
-app.use("/api/meal-plans", mealPlanRoutes);
-app.use("/api/auth", authRoutes); // e.g. POST /api/login, POST /api/register
-
-module.exports = app;
+// Start the server
+app.listen(
+  PORT,
+  () => console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`.yellow.bold)
+);
