@@ -145,8 +145,7 @@ export const foodItemsApi = {
   getExpiring: (days = 3) => {
     const userId = getCurrentUserId();
     return apiRequest<any[]>(
-      `/pantry-items/expiring-soon${
-        userId ? `?userId=${userId}&daysThreshold=${days}` : ""
+      `/pantry-items/expiring-soon${userId ? `?userId=${userId}&daysThreshold=${days}` : ""
       }`
     );
   },
@@ -161,10 +160,9 @@ export const mealPlansApi = {
   getByDateRange: (startDate: string, endDate: string) => {
     const userId = getCurrentUserId();
     return apiRequest<any[]>(
-      `/meal-plans${
-        userId
-          ? `?userId=${userId}&start=${startDate}&end=${endDate}`
-          : `?start=${startDate}&end=${endDate}`
+      `/meal-plans${userId
+        ? `?userId=${userId}&start=${startDate}&end=${endDate}`
+        : `?start=${startDate}&end=${endDate}`
       }`
     );
   },
