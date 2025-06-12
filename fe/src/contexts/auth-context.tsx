@@ -2,22 +2,27 @@
 
 import type React from "react";
 import { createContext, useContext, useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import {
-  authApi,
+  login as loginApi,
+  register as registerApi,
+  getCurrentUser,
+  logout as logoutApi,
   type User,
-  type LoginCredentials,
-  type RegisterData,
 } from "@/lib/auth";
-import { toast } from "@/components/ui/use-toast";
+import { useToast } from "@/components/ui/use-toast";
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (credentials: LoginCredentials) => Promise<void>;
-  register: (data: RegisterData) => Promise<void>;
-  logout: () => void;
+  login: (identifier: string, password: string) => Promise<void>;
+  register: (
+    username: string,
+    email: string,
+    password: string,
+    fullName: string
+  ) => Promise<void>;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -25,49 +30,45 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const router = useRouter();
+  const { toast } = useToast();
 
   useEffect(() => {
-    const token = localStorage.getItem("auth_token");
-
-    if (!token) {
-      setIsLoading(false);
-      return;
-    }
-
-    const loadUser = async () => {
+    const initAuth = async () => {
       try {
-        const userData = await authApi.getCurrentUser();
+        const userData = await getCurrentUser();
         setUser(userData);
       } catch (error) {
-        console.error("Failed to load user:", error);
-        localStorage.removeItem("auth_token");
-      } finally {
-        setIsLoading(false);
+        console.error("Failed to get user data:", error);
+        localStorage.removeItem("user");
       }
+      setIsLoading(false);
     };
 
-    loadUser();
+    initAuth();
   }, []);
 
-  const login = async (credentials: LoginCredentials) => {
-    setIsLoading(true);
+  const login = async (identifier: string, password: string) => {
     try {
-      const { user, token } = await authApi.login(credentials);
-      localStorage.setItem("auth_token", token);
+      setIsLoading(true);
+      const { user } = await loginApi(identifier, password);
+
+      // Store user data in localStorage since backend doesn't provide JWT
+      localStorage.setItem("user", JSON.stringify(user));
       setUser(user);
-      router.push("/");
+
       toast({
         title: "Login successful",
-        description: `Welcome back, ${user.name}!`,
+        description: `Welcome back, ${user.fullName || user.username}!`,
       });
     } catch (error) {
       console.error("Login error:", error);
       toast({
-        variant: "destructive",
         title: "Login failed",
         description:
-          error instanceof Error ? error.message : "An unknown error occurred",
+          error instanceof Error
+            ? error.message
+            : "Please check your credentials.",
+        variant: "destructive",
       });
       throw error;
     } finally {
@@ -75,24 +76,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const register = async (data: RegisterData) => {
-    setIsLoading(true);
+  const register = async (
+    username: string,
+    email: string,
+    password: string,
+    fullName: string
+  ) => {
     try {
-      const { user, token } = await authApi.register(data);
-      localStorage.setItem("auth_token", token);
+      setIsLoading(true);
+      const { user } = await registerApi(username, email, password, fullName);
+
+      // Store user data in localStorage
+      localStorage.setItem("user", JSON.stringify(user));
       setUser(user);
-      router.push("/");
+
       toast({
         title: "Registration successful",
-        description: `Welcome, ${user.name}!`,
+        description: `Welcome, ${user.fullName || user.username}!`,
       });
     } catch (error) {
       console.error("Registration error:", error);
       toast({
-        variant: "destructive",
         title: "Registration failed",
         description:
-          error instanceof Error ? error.message : "An unknown error occurred",
+          error instanceof Error
+            ? error.message
+            : "Please try again with different credentials.",
+        variant: "destructive",
       });
       throw error;
     } finally {
@@ -100,14 +110,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const logout = () => {
-    authApi.logout();
-    setUser(null);
-    router.push("/login");
-    toast({
-      title: "Logged out",
-      description: "You have been successfully logged out.",
-    });
+  const logout = async () => {
+    try {
+      await logoutApi();
+      localStorage.removeItem("user");
+      setUser(null);
+      toast({
+        title: "Logged out",
+        description: "You have been successfully logged out.",
+      });
+    } catch (error) {
+      console.error("Logout error:", error);
+      toast({
+        title: "Logout failed",
+        description: "Failed to log out. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (

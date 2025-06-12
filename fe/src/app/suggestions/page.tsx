@@ -13,17 +13,13 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  ChefHat,
-  Search,
-  Lightbulb,
-  Clock,
-  Users,
-  ShoppingCart,
-} from "lucide-react";
+import { ChefHat, Search, Lightbulb, Users, ShoppingCart } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
+import { mealPlansApi, foodItemsApi } from "@/lib/api-service";
 
 interface FoodItem {
   id: string;
+  _id?: string;
   name: string;
   quantity: string;
   category: string;
@@ -32,17 +28,15 @@ interface FoodItem {
 }
 
 interface SuggestedRecipe {
-  id: string;
-  name: string;
-  description: string;
-  prepTime: number;
-  cookTime: number;
-  servings: number;
-  difficulty: "Easy" | "Medium" | "Hard";
-  availableIngredients: string[];
-  missingIngredients: string[];
-  matchPercentage: number;
-  instructions: string[];
+  recipe: {
+    _id: string;
+    title: string;
+    instructions: string[];
+    servings: number;
+    ingredients: any[];
+  };
+  status: "can_make" | "partially_can_make";
+  missingIngredients: any[];
 }
 
 export default function SmartSuggestions() {
@@ -53,181 +47,66 @@ export default function SmartSuggestions() {
   );
   const [searchTerm, setSearchTerm] = useState("");
   const [filterDifficulty, setFilterDifficulty] = useState("all");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isMounted, setIsMounted] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
-    // Mock available food items from fridge
-    const mockFoodItems: FoodItem[] = [
-      {
-        id: "1",
-        name: "Chicken Breast",
-        quantity: "500g",
-        category: "Meat",
-        expirationDate: "2024-01-20",
-        daysUntilExpiry: 4,
-      },
-      {
-        id: "2",
-        name: "Tomatoes",
-        quantity: "4 pieces",
-        category: "Vegetables",
-        expirationDate: "2024-01-18",
-        daysUntilExpiry: 2,
-      },
-      {
-        id: "3",
-        name: "Onions",
-        quantity: "2 pieces",
-        category: "Vegetables",
-        expirationDate: "2024-01-25",
-        daysUntilExpiry: 9,
-      },
-      {
-        id: "4",
-        name: "Rice",
-        quantity: "1 kg",
-        category: "Grains",
-        expirationDate: "2024-06-01",
-        daysUntilExpiry: 137,
-      },
-      {
-        id: "5",
-        name: "Eggs",
-        quantity: "6 pieces",
-        category: "Dairy",
-        expirationDate: "2024-01-22",
-        daysUntilExpiry: 6,
-      },
-      {
-        id: "6",
-        name: "Milk",
-        quantity: "1 liter",
-        category: "Dairy",
-        expirationDate: "2024-01-19",
-        daysUntilExpiry: 3,
-      },
-      {
-        id: "7",
-        name: "Cheese",
-        quantity: "200g",
-        category: "Dairy",
-        expirationDate: "2024-01-30",
-        daysUntilExpiry: 14,
-      },
-      {
-        id: "8",
-        name: "Bell Peppers",
-        quantity: "3 pieces",
-        category: "Vegetables",
-        expirationDate: "2024-01-21",
-        daysUntilExpiry: 5,
-      },
-    ];
-
-    setAvailableFood(mockFoodItems);
-    setSelectedIngredients(mockFoodItems.slice(0, 4).map((item) => item.name));
+    setIsMounted(true);
+    fetchData();
   }, []);
 
-  useEffect(() => {
-    // Generate recipe suggestions based on selected ingredients
-    const generateSuggestions = () => {
-      const mockSuggestions: SuggestedRecipe[] = [
-        {
-          id: "1",
-          name: "Chicken Fried Rice",
-          description: "Delicious fried rice with chicken and vegetables",
-          prepTime: 15,
-          cookTime: 20,
-          servings: 4,
-          difficulty: "Easy",
-          availableIngredients: ["Chicken Breast", "Rice", "Onions", "Eggs"],
-          missingIngredients: ["Soy Sauce", "Garlic", "Ginger"],
-          matchPercentage: 75,
-          instructions: [
-            "Cook rice and set aside",
-            "Cut chicken into small pieces",
-            "Heat oil in wok or large pan",
-            "Cook chicken until done",
-            "Add onions and cook until soft",
-            "Add rice and eggs, stir fry",
-            "Season with soy sauce",
-          ],
-        },
-        {
-          id: "2",
-          name: "Chicken and Vegetable Stir Fry",
-          description: "Quick and healthy stir fry with fresh vegetables",
-          prepTime: 10,
-          cookTime: 15,
-          servings: 3,
-          difficulty: "Easy",
-          availableIngredients: ["Chicken Breast", "Bell Peppers", "Onions"],
-          missingIngredients: ["Soy Sauce", "Garlic", "Vegetable Oil"],
-          matchPercentage: 80,
-          instructions: [
-            "Slice chicken and vegetables",
-            "Heat oil in pan",
-            "Cook chicken first",
-            "Add vegetables and stir fry",
-            "Season and serve",
-          ],
-        },
-        {
-          id: "3",
-          name: "Tomato and Cheese Omelet",
-          description: "Fluffy omelet with fresh tomatoes and cheese",
-          prepTime: 5,
-          cookTime: 10,
-          servings: 2,
-          difficulty: "Easy",
-          availableIngredients: ["Eggs", "Tomatoes", "Cheese", "Milk"],
-          missingIngredients: ["Butter", "Salt", "Pepper"],
-          matchPercentage: 90,
-          instructions: [
-            "Beat eggs with milk",
-            "Heat butter in pan",
-            "Pour in eggs",
-            "Add tomatoes and cheese",
-            "Fold and serve",
-          ],
-        },
-        {
-          id: "4",
-          name: "Stuffed Bell Peppers",
-          description: "Bell peppers stuffed with rice and chicken",
-          prepTime: 20,
-          cookTime: 30,
-          servings: 4,
-          difficulty: "Medium",
-          availableIngredients: [
-            "Bell Peppers",
-            "Rice",
-            "Chicken Breast",
-            "Onions",
-          ],
-          missingIngredients: ["Ground Beef", "Herbs", "Breadcrumbs"],
-          matchPercentage: 70,
-          instructions: [
-            "Hollow out bell peppers",
-            "Cook rice and chicken",
-            "Mix filling ingredients",
-            "Stuff peppers",
-            "Bake until tender",
-          ],
-        },
-      ];
+  const fetchData = async () => {
+    setIsLoading(true);
+    try {
+      // Fetch available food items
+      const foodData = await foodItemsApi.getAll();
+      const formattedFood = Array.isArray(foodData)
+        ? foodData.map(formatFoodItem)
+        : [];
+      setAvailableFood(formattedFood);
 
-      // Filter suggestions based on selected ingredients
-      const filtered = mockSuggestions.filter((recipe) =>
-        recipe.availableIngredients.some((ingredient) =>
-          selectedIngredients.includes(ingredient)
-        )
+      // Fetch meal suggestions
+      const suggestions = await mealPlansApi.getSuggestions();
+      setSuggestedRecipes(Array.isArray(suggestions) ? suggestions : []);
+
+      // Auto-select some ingredients
+      setSelectedIngredients(
+        formattedFood.slice(0, 4).map((item) => item.name)
       );
+    } catch (error) {
+      console.error("Failed to fetch data:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load suggestions. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-      setSuggestedRecipes(filtered);
+  const formatFoodItem = (item: any): FoodItem => {
+    const calculateDaysUntilExpiry = (expirationDate: string): number => {
+      const today = new Date();
+      const expiry = new Date(expirationDate);
+      const diffTime = expiry.getTime() - today.getTime();
+      return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     };
 
-    generateSuggestions();
-  }, [selectedIngredients]);
+    return {
+      id: item._id || item.id || Math.random().toString(),
+      _id: item._id,
+      name: item.name || "",
+      quantity: String(item.quantity || ""),
+      category:
+        typeof item.category === "object"
+          ? item.category.name
+          : item.category || "Other",
+      expirationDate: item.expirationDate || "",
+      daysUntilExpiry: calculateDaysUntilExpiry(item.expirationDate || ""),
+    };
+  };
 
   const handleIngredientToggle = (ingredient: string) => {
     setSelectedIngredients((prev) =>
@@ -237,17 +116,19 @@ export default function SmartSuggestions() {
     );
   };
 
+  if (!isMounted) {
+    return null;
+  }
+
   const expiringFood = availableFood.filter(
     (item) => item.daysUntilExpiry <= 3
   );
 
-  const filteredSuggestions = suggestedRecipes.filter((recipe) => {
-    const matchesSearch = recipe.name
+  const filteredSuggestions = suggestedRecipes.filter((suggestion) => {
+    const matchesSearch = suggestion.recipe.title
       .toLowerCase()
       .includes(searchTerm.toLowerCase());
-    const matchesDifficulty =
-      filterDifficulty === "all" || recipe.difficulty === filterDifficulty;
-    return matchesSearch && matchesDifficulty;
+    return matchesSearch;
   });
 
   return (
@@ -271,191 +152,172 @@ export default function SmartSuggestions() {
           </TabsList>
 
           <TabsContent value="suggestions">
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-              {/* Available Ingredients */}
-              <div className="lg:col-span-1">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">
-                      Available Ingredients
-                    </CardTitle>
-                    <CardDescription>
-                      Select ingredients you want to use
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {availableFood.map((item) => (
-                        <div
-                          key={item.id}
-                          className="flex items-center space-x-2"
-                        >
-                          <Checkbox
-                            id={item.id}
-                            checked={selectedIngredients.includes(item.name)}
-                            onCheckedChange={() =>
-                              handleIngredientToggle(item.name)
-                            }
-                          />
-                          <label
-                            htmlFor={item.id}
-                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                          >
-                            {item.name}
-                          </label>
-                          {item.daysUntilExpiry <= 3 && (
-                            <Badge variant="destructive" className="text-xs">
-                              {item.daysUntilExpiry}d
-                            </Badge>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
+            {isLoading ? (
+              <div className="flex justify-center items-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
               </div>
-
-              {/* Recipe Suggestions */}
-              <div className="lg:col-span-3">
-                <div className="mb-4">
-                  <div className="flex gap-4">
-                    <div className="relative flex-1">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                      <Input
-                        placeholder="Search recipes..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10"
-                      />
-                    </div>
-                    <select
-                      value={filterDifficulty}
-                      onChange={(e) => setFilterDifficulty(e.target.value)}
-                      className="px-3 py-2 border rounded-md"
-                    >
-                      <option value="all">All Difficulties</option>
-                      <option value="Easy">Easy</option>
-                      <option value="Medium">Medium</option>
-                      <option value="Hard">Hard</option>
-                    </select>
-                  </div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                {/* Available Ingredients */}
+                <div className="lg:col-span-1">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">
+                        Available Ingredients
+                      </CardTitle>
+                      <CardDescription>
+                        Select ingredients you want to use
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        {availableFood.map((item) => (
+                          <div
+                            key={item.id}
+                            className="flex items-center space-x-2"
+                          >
+                            <Checkbox
+                              id={item.id}
+                              checked={selectedIngredients.includes(item.name)}
+                              onCheckedChange={() =>
+                                handleIngredientToggle(item.name)
+                              }
+                            />
+                            <label
+                              htmlFor={item.id}
+                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                            >
+                              {item.name}
+                            </label>
+                            {item.daysUntilExpiry <= 3 && (
+                              <Badge variant="destructive" className="text-xs">
+                                {item.daysUntilExpiry}d
+                              </Badge>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {filteredSuggestions.map((recipe) => (
-                    <Card
-                      key={recipe.id}
-                      className="hover:shadow-lg transition-shadow"
-                    >
-                      <CardHeader>
-                        <div className="flex items-center justify-between">
-                          <CardTitle className="text-lg">
-                            {recipe.name}
-                          </CardTitle>
-                          <Badge
-                            variant={
-                              recipe.matchPercentage >= 80
-                                ? "default"
-                                : "secondary"
-                            }
-                          >
-                            {recipe.matchPercentage}% match
-                          </Badge>
-                        </div>
-                        <CardDescription>{recipe.description}</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-4">
-                          {/* Recipe Info */}
-                          <div className="flex items-center justify-between text-sm">
-                            <div className="flex items-center gap-2">
-                              <Clock className="h-4 w-4" />
-                              <span>
-                                {recipe.prepTime + recipe.cookTime} min
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Users className="h-4 w-4" />
-                              <span>{recipe.servings} servings</span>
-                            </div>
-                            <Badge variant="outline">{recipe.difficulty}</Badge>
-                          </div>
+                {/* Recipe Suggestions */}
+                <div className="lg:col-span-3">
+                  <div className="mb-4">
+                    <div className="flex gap-4">
+                      <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                        <Input
+                          placeholder="Search recipes..."
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="pl-10"
+                        />
+                      </div>
+                    </div>
+                  </div>
 
-                          {/* Available Ingredients */}
-                          <div>
-                            <p className="text-sm font-medium mb-2">
-                              You have:
-                            </p>
-                            <div className="flex flex-wrap gap-1">
-                              {recipe.availableIngredients.map(
-                                (ingredient, index) => (
-                                  <Badge
-                                    key={index}
-                                    variant="default"
-                                    className="text-xs"
-                                  >
-                                    {ingredient}
-                                  </Badge>
-                                )
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {filteredSuggestions.map((suggestion) => (
+                      <Card
+                        key={suggestion.recipe._id}
+                        className="hover:shadow-lg transition-shadow"
+                      >
+                        <CardHeader>
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="text-lg">
+                              {suggestion.recipe.title}
+                            </CardTitle>
+                            <Badge
+                              variant={
+                                suggestion.status === "can_make"
+                                  ? "default"
+                                  : "secondary"
+                              }
+                            >
+                              {suggestion.status === "can_make"
+                                ? "Can Make"
+                                : "Partial"}
+                            </Badge>
+                          </div>
+                          <CardDescription>
+                            {suggestion.recipe.instructions?.[0]?.substring(
+                              0,
+                              100
+                            )}
+                            ...
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-4">
+                            {/* Recipe Info */}
+                            <div className="flex items-center justify-between text-sm">
+                              <div className="flex items-center gap-2">
+                                <Users className="h-4 w-4" />
+                                <span>
+                                  {suggestion.recipe.servings} servings
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Missing Ingredients */}
+                            {suggestion.missingIngredients.length > 0 && (
+                              <div>
+                                <p className="text-sm font-medium mb-2">
+                                  You need:
+                                </p>
+                                <div className="flex flex-wrap gap-1">
+                                  {suggestion.missingIngredients.map(
+                                    (ingredient, index) => (
+                                      <Badge
+                                        key={index}
+                                        variant="outline"
+                                        className="text-xs"
+                                      >
+                                        {ingredient.name} ({ingredient.needed}{" "}
+                                        {ingredient.unit})
+                                      </Badge>
+                                    )
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Actions */}
+                            <div className="flex gap-2">
+                              <Button className="flex-1" variant="outline">
+                                <ChefHat className="mr-2 h-4 w-4" />
+                                View Recipe
+                              </Button>
+                              {suggestion.missingIngredients.length > 0 && (
+                                <Button variant="outline" size="sm">
+                                  <ShoppingCart className="h-4 w-4" />
+                                </Button>
                               )}
                             </div>
                           </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
 
-                          {/* Missing Ingredients */}
-                          {recipe.missingIngredients.length > 0 && (
-                            <div>
-                              <p className="text-sm font-medium mb-2">
-                                You need:
-                              </p>
-                              <div className="flex flex-wrap gap-1">
-                                {recipe.missingIngredients.map(
-                                  (ingredient, index) => (
-                                    <Badge
-                                      key={index}
-                                      variant="outline"
-                                      className="text-xs"
-                                    >
-                                      {ingredient}
-                                    </Badge>
-                                  )
-                                )}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Actions */}
-                          <div className="flex gap-2">
-                            <Button className="flex-1" variant="outline">
-                              <ChefHat className="mr-2 h-4 w-4" />
-                              View Recipe
-                            </Button>
-                            {recipe.missingIngredients.length > 0 && (
-                              <Button variant="outline" size="sm">
-                                <ShoppingCart className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </div>
-                        </div>
+                  {filteredSuggestions.length === 0 && (
+                    <Card>
+                      <CardContent className="text-center py-8">
+                        <Lightbulb className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                        <h3 className="text-lg font-semibold mb-2">
+                          No suggestions found
+                        </h3>
+                        <p className="text-muted-foreground">
+                          Try selecting more ingredients or adjusting your
+                          filters
+                        </p>
                       </CardContent>
                     </Card>
-                  ))}
+                  )}
                 </div>
-
-                {filteredSuggestions.length === 0 && (
-                  <Card>
-                    <CardContent className="text-center py-8">
-                      <Lightbulb className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-                      <h3 className="text-lg font-semibold mb-2">
-                        No suggestions found
-                      </h3>
-                      <p className="text-muted-foreground">
-                        Try selecting more ingredients or adjusting your filters
-                      </p>
-                    </CardContent>
-                  </Card>
-                )}
               </div>
-            </div>
+            )}
           </TabsContent>
 
           <TabsContent value="expiring">
@@ -494,59 +356,40 @@ export default function SmartSuggestions() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
                       {suggestedRecipes
-                        .filter((recipe) =>
-                          recipe.availableIngredients.some((ingredient) =>
-                            expiringFood.some(
-                              (food) => food.name === ingredient
+                        .filter((suggestion) =>
+                          suggestion.recipe.ingredients?.some((ingredient) =>
+                            expiringFood.some((food) =>
+                              food.name
+                                .toLowerCase()
+                                .includes(ingredient.name?.toLowerCase() || "")
                             )
                           )
                         )
-                        .map((recipe) => (
+                        .map((suggestion) => (
                           <Card
-                            key={recipe.id}
+                            key={suggestion.recipe._id}
                             className="hover:shadow-lg transition-shadow"
                           >
                             <CardHeader>
                               <CardTitle className="text-lg">
-                                {recipe.name}
+                                {suggestion.recipe.title}
                               </CardTitle>
                               <CardDescription>
-                                {recipe.description}
+                                {suggestion.recipe.instructions?.[0]?.substring(
+                                  0,
+                                  100
+                                )}
+                                ...
                               </CardDescription>
                             </CardHeader>
                             <CardContent>
                               <div className="space-y-3">
                                 <div className="flex items-center justify-between text-sm">
                                   <div className="flex items-center gap-2">
-                                    <Clock className="h-4 w-4" />
+                                    <Users className="h-4 w-4" />
                                     <span>
-                                      {recipe.prepTime + recipe.cookTime} min
+                                      {suggestion.recipe.servings} servings
                                     </span>
-                                  </div>
-                                  <Badge variant="outline">
-                                    {recipe.difficulty}
-                                  </Badge>
-                                </div>
-                                <div>
-                                  <p className="text-sm font-medium mb-2">
-                                    Uses expiring:
-                                  </p>
-                                  <div className="flex flex-wrap gap-1">
-                                    {recipe.availableIngredients
-                                      .filter((ingredient) =>
-                                        expiringFood.some(
-                                          (food) => food.name === ingredient
-                                        )
-                                      )
-                                      .map((ingredient, index) => (
-                                        <Badge
-                                          key={index}
-                                          variant="destructive"
-                                          className="text-xs"
-                                        >
-                                          {ingredient}
-                                        </Badge>
-                                      ))}
                                   </div>
                                 </div>
                                 <Button className="w-full" variant="outline">

@@ -38,16 +38,21 @@ import {
   Edit,
   Trash2,
 } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
+import { foodItemsApi } from "@/lib/api-service";
 
 interface FoodItem {
   id: string;
+  _id?: string;
   name: string;
-  quantity: string;
+  quantity: string | number;
+  unit?: string | { _id: string; name: string; abbreviation?: string };
   category: string;
   expirationDate: string;
   location: string;
   addedDate: string;
-  daysUntilExpiry: number;
+  daysUntilExpiry?: number;
+  ownedBy?: string | { _id: string; username: string; fullName?: string };
 }
 
 const categories = [
@@ -80,89 +85,120 @@ export default function FridgeManagement() {
   const [filterLocation, setFilterLocation] = useState("all");
   const [sortBy, setSortBy] = useState("expiry");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isMounted, setIsMounted] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
-    // Mock data - replace with API call
-    const mockItems: FoodItem[] = [
-      {
-        id: "1",
-        name: "Milk",
-        quantity: "1 liter",
-        category: "Dairy",
-        expirationDate: "2024-01-18",
-        location: "Main Fridge",
-        addedDate: "2024-01-10",
-        daysUntilExpiry: 2,
-      },
-      {
-        id: "2",
-        name: "Chicken Breast",
-        quantity: "500g",
-        category: "Meat",
-        expirationDate: "2024-01-17",
-        location: "Freezer",
-        addedDate: "2024-01-12",
-        daysUntilExpiry: 1,
-      },
-      {
-        id: "3",
-        name: "Lettuce",
-        quantity: "1 head",
-        category: "Vegetables",
-        expirationDate: "2024-01-19",
-        location: "Vegetable Drawer",
-        addedDate: "2024-01-14",
-        daysUntilExpiry: 3,
-      },
-      {
-        id: "4",
-        name: "Yogurt",
-        quantity: "4 cups",
-        category: "Dairy",
-        expirationDate: "2024-01-25",
-        location: "Main Fridge",
-        addedDate: "2024-01-15",
-        daysUntilExpiry: 9,
-      },
-      {
-        id: "5",
-        name: "Apples",
-        quantity: "6 pieces",
-        category: "Fruits",
-        expirationDate: "2024-01-22",
-        location: "Counter",
-        addedDate: "2024-01-13",
-        daysUntilExpiry: 6,
-      },
-    ];
-    setFoodItems(mockItems);
+    setIsMounted(true);
+    fetchFoodItems();
   }, []);
 
-  const handleAddFood = async (formData: FormData) => {
-    const expirationDate = formData.get("expirationDate") as string;
+  const calculateDaysUntilExpiry = (expirationDate: string): number => {
     const today = new Date();
     const expiry = new Date(expirationDate);
-    const daysUntilExpiry = Math.ceil(
-      (expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
-    );
-
-    const newItem: FoodItem = {
-      id: Date.now().toString(),
-      name: formData.get("name") as string,
-      quantity: formData.get("quantity") as string,
-      category: formData.get("category") as string,
-      expirationDate,
-      location: formData.get("location") as string,
-      addedDate: new Date().toISOString().split("T")[0],
-      daysUntilExpiry,
-    };
-
-    setFoodItems((prev) => [newItem, ...prev]);
-    setIsAddDialogOpen(false);
+    const diffTime = expiry.getTime() - today.getTime();
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
 
-  const handleDeleteFood = (id: string) => {
-    setFoodItems((prev) => prev.filter((item) => item.id !== id));
+  // Helper function to extract string value from populated fields
+  const extractStringValue = (field: any, defaultValue = ""): string => {
+    if (typeof field === "string") return field;
+    if (field && typeof field === "object" && field.name) return field.name;
+    return defaultValue;
+  };
+
+  const formatFoodItem = (item: any): FoodItem => {
+    return {
+      id: item._id || item.id || Math.random().toString(),
+      _id: item._id,
+      name: item.name || "",
+      quantity: item.quantity || "",
+      unit: item.unit,
+      category: extractStringValue(item.category, "Other"),
+      expirationDate: item.expirationDate || item.expiry_date || "",
+      location: item.location || "Main Fridge",
+      addedDate:
+        item.addedDate ||
+        item.created_at ||
+        new Date().toISOString().split("T")[0],
+      daysUntilExpiry:
+        item.daysUntilExpiry ||
+        calculateDaysUntilExpiry(item.expirationDate || item.expiry_date || ""),
+      ownedBy: item.ownedBy,
+    };
+  };
+
+  const fetchFoodItems = async () => {
+    setIsLoading(true);
+    try {
+      const data = await foodItemsApi.getAll();
+      const formattedItems = Array.isArray(data)
+        ? data.map(formatFoodItem)
+        : [];
+      setFoodItems(formattedItems);
+    } catch (error) {
+      console.error("Failed to fetch food items:", error);
+      setFoodItems([]); // Set empty array on error
+      toast({
+        title: "Error",
+        description: "Failed to load food items. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAddFood = async (formData: FormData) => {
+    try {
+      const newItem = {
+        name: formData.get("name") as string,
+        quantity: formData.get("quantity") as string,
+        category: formData.get("category") as string,
+        expirationDate: formData.get("expirationDate") as string,
+        location: formData.get("location") as string,
+        // You might need to add these fields based on your backend requirements
+        // unit: "some-unit-id",
+        // ownedBy: "current-user-id",
+      };
+
+      const addedItem = await foodItemsApi.create(newItem);
+      const formattedItem = formatFoodItem(addedItem);
+      setFoodItems((prev) => [formattedItem, ...prev]);
+      setIsAddDialogOpen(false);
+      toast({
+        title: "Success",
+        description: "Food item added successfully!",
+      });
+    } catch (error) {
+      console.error("Failed to add food item:", error);
+      toast({
+        title: "Error",
+        description: "Failed to add food item. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteFood = async (id: string) => {
+    try {
+      await foodItemsApi.delete(id);
+      setFoodItems((prev) =>
+        prev.filter((item) => (item.id || item._id) !== id)
+      );
+      toast({
+        title: "Success",
+        description: "Food item deleted successfully!",
+      });
+    } catch (error) {
+      console.error("Failed to delete food item:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete food item. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const getExpiryStatus = (days: number) => {
@@ -179,14 +215,23 @@ export default function FridgeManagement() {
     return { color: "bg-green-100 text-green-800", text: `${days} days` };
   };
 
+  // Don't render until mounted to prevent hydration issues
+  if (!isMounted) {
+    return null;
+  }
+
   let filteredItems = foodItems.filter((item) => {
-    const matchesSearch = item.name
+    const itemName = item?.name || "";
+    const itemCategory = item?.category || "";
+    const itemLocation = item?.location || "";
+
+    const matchesSearch = itemName
       .toLowerCase()
       .includes(searchTerm.toLowerCase());
     const matchesCategory =
-      filterCategory === "all" || item.category === filterCategory;
+      filterCategory === "all" || itemCategory === filterCategory;
     const matchesLocation =
-      filterLocation === "all" || item.location === filterLocation;
+      filterLocation === "all" || itemLocation === filterLocation;
     return matchesSearch && matchesCategory && matchesLocation;
   });
 
@@ -194,19 +239,21 @@ export default function FridgeManagement() {
   filteredItems = filteredItems.sort((a, b) => {
     switch (sortBy) {
       case "expiry":
-        return a.daysUntilExpiry - b.daysUntilExpiry;
+        return (a.daysUntilExpiry || 0) - (b.daysUntilExpiry || 0);
       case "name":
-        return a.name.localeCompare(b.name);
+        return (a.name || "").localeCompare(b.name || "");
       case "category":
-        return a.category.localeCompare(b.category);
+        return (a.category || "").localeCompare(b.category || "");
       case "location":
-        return a.location.localeCompare(b.location);
+        return (a.location || "").localeCompare(b.location || "");
       default:
         return 0;
     }
   });
 
-  const expiringItems = foodItems.filter((item) => item.daysUntilExpiry <= 3);
+  const expiringItems = foodItems.filter(
+    (item) => (item.daysUntilExpiry || 0) <= 3
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 dark:from-slate-900 dark:to-slate-800">
@@ -350,7 +397,10 @@ export default function FridgeManagement() {
                     Categories
                   </p>
                   <p className="text-2xl font-bold">
-                    {new Set(foodItems.map((item) => item.category)).size}
+                    {
+                      new Set(foodItems.map((item) => item.category || "Other"))
+                        .size
+                    }
                   </p>
                 </div>
                 <Calendar className="h-8 w-8 text-muted-foreground" />
@@ -365,7 +415,11 @@ export default function FridgeManagement() {
                     Locations
                   </p>
                   <p className="text-2xl font-bold">
-                    {new Set(foodItems.map((item) => item.location)).size}
+                    {
+                      new Set(
+                        foodItems.map((item) => item.location || "Main Fridge")
+                      ).size
+                    }
                   </p>
                 </div>
                 <MapPin className="h-8 w-8 text-muted-foreground" />
@@ -428,70 +482,104 @@ export default function FridgeManagement() {
           </CardContent>
         </Card>
 
-        {/* Food Items Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filteredItems.map((item) => {
-            const expiryStatus = getExpiryStatus(item.daysUntilExpiry);
-            return (
-              <Card key={item.id} className="hover:shadow-lg transition-shadow">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg">{item.name}</CardTitle>
-                    <Badge className={expiryStatus.color}>
-                      {expiryStatus.text}
-                    </Badge>
-                  </div>
-                  <CardDescription>{item.quantity}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Calendar className="h-4 w-4" />
-                      <span>
-                        Expires:{" "}
-                        {new Date(item.expirationDate).toLocaleDateString()}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <MapPin className="h-4 w-4" />
-                      <span>{item.location}</span>
-                    </div>
-                    <Badge variant="outline" className="text-xs">
-                      {item.category}
-                    </Badge>
-                  </div>
-                  <div className="flex gap-2 mt-4">
-                    <Button variant="outline" size="sm" className="flex-1">
-                      <Edit className="h-4 w-4 mr-1" />
-                      Edit
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDeleteFood(item.id)}
-                      className="text-red-600 hover:text-red-700"
+        {/* Loading State */}
+        {isLoading ? (
+          <div className="flex justify-center items-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+          </div>
+        ) : (
+          <>
+            {/* Food Items Grid */}
+            {filteredItems.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {filteredItems.map((item) => {
+                  const itemId =
+                    item.id || item._id || Math.random().toString();
+                  const expiryStatus = getExpiryStatus(
+                    item.daysUntilExpiry || 0
+                  );
+
+                  // Safe rendering of quantity with unit
+                  const quantityDisplay = () => {
+                    const qty = String(item.quantity || "");
+                    const unit = extractStringValue(item.unit, "");
+                    return unit ? `${qty} ${unit}` : qty;
+                  };
+
+                  return (
+                    <Card
+                      key={itemId}
+                      className="hover:shadow-lg transition-shadow"
                     >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
+                      <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-lg">
+                            {item.name || "Unknown Item"}
+                          </CardTitle>
+                          <Badge className={expiryStatus.color}>
+                            {expiryStatus.text}
+                          </Badge>
+                        </div>
+                        <CardDescription>{quantityDisplay()}</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Calendar className="h-4 w-4" />
+                            <span>
+                              Expires:{" "}
+                              {item.expirationDate
+                                ? new Date(
+                                    item.expirationDate
+                                  ).toLocaleDateString()
+                                : "No date"}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <MapPin className="h-4 w-4" />
+                            <span>{item.location || "Unknown Location"}</span>
+                          </div>
+                          <Badge variant="outline" className="text-xs">
+                            {item.category || "Other"}
+                          </Badge>
+                        </div>
+                        <div className="flex gap-2 mt-4">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1"
+                          >
+                            <Edit className="h-4 w-4 mr-1" />
+                            Edit
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDeleteFood(itemId)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            ) : (
+              <Card>
+                <CardContent className="text-center py-8">
+                  <Refrigerator className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">
+                    No food items found
+                  </h3>
+                  <p className="text-muted-foreground">
+                    Try adjusting your search or filters
+                  </p>
                 </CardContent>
               </Card>
-            );
-          })}
-        </div>
-
-        {filteredItems.length === 0 && (
-          <Card>
-            <CardContent className="text-center py-8">
-              <Refrigerator className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">
-                No food items found
-              </h3>
-              <p className="text-muted-foreground">
-                Try adjusting your search or filters
-              </p>
-            </CardContent>
-          </Card>
+            )}
+          </>
         )}
       </div>
     </div>
