@@ -116,16 +116,16 @@ export const shoppingListsApi = {
     }),
 };
 
-// Food Items API (Fridge) - change back to food-items
+// Food Items API (Fridge) - change back to pantry-items
 export const foodItemsApi = {
   getAll: () => {
     const userId = getCurrentUserId();
-    return apiRequest<any[]>(`/food-items${userId ? `?userId=${userId}` : ""}`);
+    return apiRequest<any[]>(`/pantry-items${userId ? `?userId=${userId}` : ""}`);
   },
-  getById: (id: string) => apiRequest<any>(`/food-items/${id}`),
+  getById: (id: string) => apiRequest<any>(`/pantry-items/${id}`),
   create: (data: any) => {
     const userId = getCurrentUserId();
-    return apiRequest<any>("/food-items", {
+    return apiRequest<any>("/pantry-items", {
       method: "POST",
       body: JSON.stringify({
         ...data,
@@ -134,18 +134,18 @@ export const foodItemsApi = {
     });
   },
   update: (id: string, data: any) =>
-    apiRequest<any>(`/food-items/${id}`, {
+    apiRequest<any>(`/pantry-items/${id}`, {
       method: "PUT",
       body: JSON.stringify(data),
     }),
   delete: (id: string) =>
-    apiRequest<void>(`/food-items/${id}`, {
+    apiRequest<void>(`/pantry-items/${id}`, {
       method: "DELETE",
     }),
   getExpiring: (days = 3) => {
     const userId = getCurrentUserId();
     return apiRequest<any[]>(
-      `/food-items/expiring-soon${
+      `/pantry-items/expiring-soon${
         userId ? `?userId=${userId}&daysThreshold=${days}` : ""
       }`
     );
