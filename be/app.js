@@ -94,10 +94,10 @@ const mealPlanRoutes = require("./routes/mealPlanRoutes");
 const authRoutes = require("./routes/authRoutes"); // Auth routes (register, login)
 
 // Mount routers under /api
-app.use("/api/shoppinglists", shoppingListRoutes);
-app.use("/api/pantryitems", pantryItemRoutes);
+app.use("/api/shopping-lists", shoppingListRoutes);
+app.use("/api/pantry-items", pantryItemRoutes);
 app.use("/api/recipes", recipeRoutes);
-app.use("/api/mealplans", mealPlanRoutes);
+app.use("/api/meal-plans", mealPlanRoutes);
 app.use("/api/auth", authRoutes); // e.g. POST /api/login, POST /api/register
 
 module.exports = app;
