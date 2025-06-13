@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import ProtectedRoute from "@/components/protected-route";
 import {
   Card,
@@ -22,9 +23,50 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/auth-context";
+import { shoppingListsApi } from "@/lib/api-service";
 
 export default function Dashboard() {
   const { user } = useAuth();
+
+  // Example: Fetch shopping lists and fridge items for stats
+  const [fridgeCount, setFridgeCount] = useState<number>(0);
+  const [expiringSoon, setExpiringSoon] = useState<number>(0);
+  const [shoppingListCount, setShoppingListCount] = useState<number>(0);
+  const [mealPlanCount, setMealPlanCount] = useState<number>(0);
+
+  useEffect(() => {
+    // Fetch shopping lists count
+    shoppingListsApi.getAll().then((lists) => {
+      setShoppingListCount(lists.length);
+      // Example: count completed items for progress
+      // You can expand this logic as needed
+    });
+
+    // Fetch fridge items and expiring soon (replace with your real API)
+    fetch("/api/fridge")
+      .then((res) => res.json())
+      .then((items) => {
+        setFridgeCount(items.length);
+        setExpiringSoon(
+          items.filter(
+            (item: any) =>
+              item.expiryDate &&
+              new Date(item.expiryDate).getTime() - Date.now() <
+                7 * 24 * 60 * 60 * 1000
+          ).length
+        );
+      })
+      .catch(() => {
+        setFridgeCount(0);
+        setExpiringSoon(0);
+      });
+
+    // Fetch meal plans (replace with your real API)
+    fetch("/api/meal-plans")
+      .then((res) => res.json())
+      .then((plans) => setMealPlanCount(plans.length))
+      .catch(() => setMealPlanCount(0));
+  }, []);
 
   return (
     <ProtectedRoute>
@@ -49,7 +91,7 @@ export default function Dashboard() {
                     <p className="text-sm font-medium text-muted-foreground">
                       Items in Fridge
                     </p>
-                    <p className="text-2xl font-bold">24</p>
+                    <p className="text-2xl font-bold">{fridgeCount}</p>
                   </div>
                   <Refrigerator className="h-8 w-8 text-blue-500" />
                 </div>
@@ -62,7 +104,9 @@ export default function Dashboard() {
                     <p className="text-sm font-medium text-muted-foreground">
                       Expiring Soon
                     </p>
-                    <p className="text-2xl font-bold text-orange-600">3</p>
+                    <p className="text-2xl font-bold text-orange-600">
+                      {expiringSoon}
+                    </p>
                   </div>
                   <AlertTriangle className="h-8 w-8 text-orange-500" />
                 </div>
@@ -75,7 +119,7 @@ export default function Dashboard() {
                     <p className="text-sm font-medium text-muted-foreground">
                       Shopping Lists
                     </p>
-                    <p className="text-2xl font-bold">2</p>
+                    <p className="text-2xl font-bold">{shoppingListCount}</p>
                   </div>
                   <ShoppingCart className="h-8 w-8 text-green-500" />
                 </div>
@@ -88,7 +132,7 @@ export default function Dashboard() {
                     <p className="text-sm font-medium text-muted-foreground">
                       Meal Plans
                     </p>
-                    <p className="text-2xl font-bold">7</p>
+                    <p className="text-2xl font-bold">{mealPlanCount}</p>
                   </div>
                   <Calendar className="h-8 w-8 text-purple-500" />
                 </div>

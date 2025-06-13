@@ -25,6 +25,8 @@ import {
   Trash2,
   ShoppingCart,
 } from "lucide-react";
+import { useAuth } from "@/contexts/auth-context";
+import { useToast } from "@/components/ui/use-toast";
 
 interface PurchaseData {
   month: string;
@@ -52,143 +54,62 @@ export default function ReportsAndStatistics() {
   const [timeRange, setTimeRange] = useState("6months");
   const [purchaseData, setPurchaseData] = useState<PurchaseData[]>([]);
   const [wasteData, setWasteData] = useState<WasteData[]>([]);
-  const [consumptionTrends, setConsumptionTrends] = useState<
-    ConsumptionTrend[]
-  >([]);
+  const [consumptionTrends, setConsumptionTrends] = useState<ConsumptionTrend[]>([]);
+  const { token } = useAuth();
+  const { toast } = useToast();
 
   useEffect(() => {
-    // Mock data - replace with API calls
-    const mockPurchaseData: PurchaseData[] = [
-      {
-        month: "Jan 2024",
-        amount: 450,
-        items: 67,
-        categories: { Vegetables: 120, Meat: 180, Dairy: 80, Grains: 70 },
-      },
-      {
-        month: "Feb 2024",
-        amount: 520,
-        items: 73,
-        categories: { Vegetables: 140, Meat: 200, Dairy: 90, Grains: 90 },
-      },
-      {
-        month: "Mar 2024",
-        amount: 480,
-        items: 69,
-        categories: { Vegetables: 130, Meat: 170, Dairy: 85, Grains: 95 },
-      },
-      {
-        month: "Apr 2024",
-        amount: 510,
-        items: 71,
-        categories: { Vegetables: 135, Meat: 190, Dairy: 95, Grains: 90 },
-      },
-      {
-        month: "May 2024",
-        amount: 490,
-        items: 68,
-        categories: { Vegetables: 125, Meat: 185, Dairy: 90, Grains: 90 },
-      },
-      {
-        month: "Jun 2024",
-        amount: 530,
-        items: 75,
-        categories: { Vegetables: 150, Meat: 195, Dairy: 95, Grains: 90 },
-      },
-    ];
+    // Fetch reports data from backend using JWT
+    const fetchReports = async () => {
+      try {
+        // Purchases
+        const purchaseRes = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"}/reports/purchases?range=${timeRange}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+        const purchaseJson = await purchaseRes.json();
+        setPurchaseData(Array.isArray(purchaseJson) ? purchaseJson : []);
 
-    const mockWasteData: WasteData[] = [
-      {
-        month: "Jan 2024",
-        wastedItems: 8,
-        wastedValue: 45,
-        categories: { Vegetables: 3, Fruits: 2, Dairy: 2, Leftovers: 1 },
-      },
-      {
-        month: "Feb 2024",
-        wastedItems: 12,
-        wastedValue: 65,
-        categories: { Vegetables: 4, Fruits: 3, Dairy: 3, Leftovers: 2 },
-      },
-      {
-        month: "Mar 2024",
-        wastedItems: 6,
-        wastedValue: 35,
-        categories: { Vegetables: 2, Fruits: 2, Dairy: 1, Leftovers: 1 },
-      },
-      {
-        month: "Apr 2024",
-        wastedItems: 9,
-        wastedValue: 50,
-        categories: { Vegetables: 3, Fruits: 2, Dairy: 2, Leftovers: 2 },
-      },
-      {
-        month: "May 2024",
-        wastedItems: 7,
-        wastedValue: 40,
-        categories: { Vegetables: 2, Fruits: 2, Dairy: 2, Leftovers: 1 },
-      },
-      {
-        month: "Jun 2024",
-        wastedItems: 5,
-        wastedValue: 30,
-        categories: { Vegetables: 2, Fruits: 1, Dairy: 1, Leftovers: 1 },
-      },
-    ];
+        // Waste
+        const wasteRes = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"}/reports/waste?range=${timeRange}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+        const wasteJson = await wasteRes.json();
+        setWasteData(Array.isArray(wasteJson) ? wasteJson : []);
 
-    const mockConsumptionTrends: ConsumptionTrend[] = [
-      {
-        category: "Vegetables",
-        thisMonth: 150,
-        lastMonth: 135,
-        trend: "up",
-        percentage: 11.1,
-      },
-      {
-        category: "Meat",
-        thisMonth: 195,
-        lastMonth: 185,
-        trend: "up",
-        percentage: 5.4,
-      },
-      {
-        category: "Dairy",
-        thisMonth: 95,
-        lastMonth: 90,
-        trend: "up",
-        percentage: 5.6,
-      },
-      {
-        category: "Grains",
-        thisMonth: 90,
-        lastMonth: 90,
-        trend: "stable",
-        percentage: 0,
-      },
-      {
-        category: "Fruits",
-        thisMonth: 80,
-        lastMonth: 85,
-        trend: "down",
-        percentage: -5.9,
-      },
-    ];
+        // Consumption trends
+        const trendRes = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"}/reports/consumption-trends?range=${timeRange}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+        const trendJson = await trendRes.json();
+        setConsumptionTrends(Array.isArray(trendJson) ? trendJson : []);
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to load reports data.",
+          variant: "destructive",
+        });
+        setPurchaseData([]);
+        setWasteData([]);
+        setConsumptionTrends([]);
+      }
+    };
 
-    setPurchaseData(mockPurchaseData);
-    setWasteData(mockWasteData);
-    setConsumptionTrends(mockConsumptionTrends);
-  }, [timeRange]);
+    if (token) fetchReports();
+  }, [timeRange, token, toast]);
 
   const totalSpent = purchaseData.reduce((sum, data) => sum + data.amount, 0);
   const totalItems = purchaseData.reduce((sum, data) => sum + data.items, 0);
-  const totalWasted = wasteData.reduce(
-    (sum, data) => sum + data.wastedValue,
-    0
-  );
-  const totalWastedItems = wasteData.reduce(
-    (sum, data) => sum + data.wastedItems,
-    0
-  );
+  const totalWasted = wasteData.reduce((sum, data) => sum + data.wastedValue, 0);
+  const totalWastedItems = wasteData.reduce((sum, data) => sum + data.wastedItems, 0);
   const wastePercentage =
     totalSpent > 0 ? ((totalWasted / totalSpent) * 100).toFixed(1) : "0";
 
@@ -283,7 +204,7 @@ export default function ReportsAndStatistics() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                ${Math.round(totalSpent / purchaseData.length)}
+                ${purchaseData.length > 0 ? Math.round(totalSpent / purchaseData.length) : 0}
               </div>
               <p className="text-xs text-muted-foreground">
                 Per month spending
@@ -475,7 +396,7 @@ export default function ReportsAndStatistics() {
                   {wasteData.length > 0 && (
                     <div className="space-y-3">
                       {Object.entries(
-                        wasteData[wasteData.length - 1].categories
+                        wasteData[wasteData.length - 1]?.categories || {}
                       )
                         .sort(([, a], [, b]) => b - a)
                         .map(([category, count], index) => (

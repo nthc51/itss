@@ -1,12 +1,10 @@
 "use client";
 
 import type React from "react";
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState } from "react";
 import {
   login as loginApi,
   register as registerApi,
-  getCurrentUser,
-  logout as logoutApi,
   type User,
 } from "@/lib/auth";
 import { useToast } from "@/components/ui/use-toast";
@@ -15,6 +13,7 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  token: string | null;
   login: (identifier: string, password: string) => Promise<void>;
   register: (
     username: string,
@@ -29,32 +28,22 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [token, setToken] = useState<string | null>(
+    typeof window !== "undefined" ? localStorage.getItem("token") : null
+  );
+  const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
-  useEffect(() => {
-    const initAuth = async () => {
-      try {
-        const userData = await getCurrentUser();
-        setUser(userData);
-      } catch (error) {
-        console.error("Failed to get user data:", error);
-        localStorage.removeItem("user");
-      }
-      setIsLoading(false);
-    };
-
-    initAuth();
-  }, []);
+  // Optionally, restore user info from backend using token here
 
   const login = async (identifier: string, password: string) => {
     try {
       setIsLoading(true);
-      const { user } = await loginApi(identifier, password);
+      const { user, token } = await loginApi(identifier, password);
 
-      // Store user data in localStorage since backend doesn't provide JWT
-      localStorage.setItem("user", JSON.stringify(user));
       setUser(user);
+      setToken(token);
+      localStorage.setItem("token", token);
 
       toast({
         title: "Login successful",
@@ -84,11 +73,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   ) => {
     try {
       setIsLoading(true);
-      const { user } = await registerApi(username, email, password, fullName);
+      const { user, token } = await registerApi(username, email, password, fullName);
 
-      // Store user data in localStorage
-      localStorage.setItem("user", JSON.stringify(user));
       setUser(user);
+      setToken(token);
+      localStorage.setItem("token", token);
 
       toast({
         title: "Registration successful",
@@ -112,9 +101,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
-      await logoutApi();
-      localStorage.removeItem("user");
       setUser(null);
+      setToken(null);
+      localStorage.removeItem("token");
       toast({
         title: "Logged out",
         description: "You have been successfully logged out.",
@@ -134,7 +123,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         user,
         isLoading,
-        isAuthenticated: !!user,
+        isAuthenticated: !!user && !!token,
+        token,
         login,
         register,
         logout,

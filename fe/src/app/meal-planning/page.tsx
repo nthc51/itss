@@ -31,6 +31,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ChefHat, Clock, Users, Plus, Star, Heart } from "lucide-react";
+import { useAuth } from "@/contexts/auth-context";
+import { useToast } from "@/components/ui/use-toast";
 
 interface Recipe {
   id: string;
@@ -69,110 +71,71 @@ export default function MealPlanning() {
     date: string;
     type: string;
   } | null>(null);
+  const { token } = useAuth();
+  const { toast } = useToast();
 
   useEffect(() => {
-    // Mock data - replace with API calls
-    const mockRecipes: Recipe[] = [
-      {
-        id: "1",
-        name: "Scrambled Eggs with Toast",
-        description:
-          "Classic breakfast with fluffy scrambled eggs and buttered toast",
-        prepTime: 5,
-        cookTime: 10,
-        servings: 2,
-        difficulty: "Easy",
-        ingredients: [
-          "4 eggs",
-          "2 slices bread",
-          "2 tbsp butter",
-          "Salt",
-          "Pepper",
-        ],
-        instructions: [
-          "Beat eggs in bowl",
-          "Heat butter in pan",
-          "Cook eggs stirring gently",
-          "Toast bread",
-          "Serve together",
-        ],
-        isFavorite: true,
-        isPopular: true,
-        category: "Main Course",
-      },
-      {
-        id: "2",
-        name: "Chicken Caesar Salad",
-        description:
-          "Fresh romaine lettuce with grilled chicken and caesar dressing",
-        prepTime: 15,
-        cookTime: 20,
-        servings: 4,
-        difficulty: "Medium",
-        ingredients: [
-          "2 chicken breasts",
-          "1 head romaine lettuce",
-          "Caesar dressing",
-          "Parmesan cheese",
-          "Croutons",
-        ],
-        instructions: [
-          "Grill chicken",
-          "Chop lettuce",
-          "Mix with dressing",
-          "Add toppings",
-          "Serve immediately",
-        ],
-        isFavorite: false,
-        isPopular: true,
-        category: "Main Course",
-      },
-      {
-        id: "3",
-        name: "Grilled Salmon with Vegetables",
-        description: "Healthy grilled salmon with seasonal vegetables",
-        prepTime: 10,
-        cookTime: 25,
-        servings: 4,
-        difficulty: "Medium",
-        ingredients: [
-          "4 salmon fillets",
-          "Mixed vegetables",
-          "Olive oil",
-          "Lemon",
-          "Herbs",
-        ],
-        instructions: [
-          "Preheat grill",
-          "Season salmon",
-          "Grill salmon and vegetables",
-          "Serve with lemon",
-        ],
-        isFavorite: true,
-        isPopular: false,
-        category: "Main Course",
-      },
-    ];
+    // Fetch recipes and meal plans from backend
+    const fetchData = async () => {
+      try {
+        // Recipes
+        const recipesRes = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"}/recipes`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+        const recipesData = await recipesRes.json();
+        setRecipes(
+          Array.isArray(recipesData)
+            ? recipesData.map((r: any) => ({
+                id: r._id || r.id,
+                name: r.name,
+                description: r.description,
+                prepTime: r.prepTime,
+                cookTime: r.cookTime,
+                servings: r.servings,
+                difficulty: r.difficulty,
+                ingredients: r.ingredients,
+                instructions: r.instructions,
+                isFavorite: !!r.isFavorite,
+                isPopular: !!r.isPopular,
+                category: r.category,
+              }))
+            : []
+        );
 
-    const mockMealPlans: MealPlan[] = [
-      {
-        id: "1",
-        date: "2024-01-15",
-        breakfast: mockRecipes[0],
-        lunch: mockRecipes[1],
-        dinner: mockRecipes[2],
-      },
-      {
-        id: "2",
-        date: "2024-01-16",
-        breakfast: mockRecipes[0],
-        dinner: mockRecipes[2],
-      },
-    ];
+        // Meal plans
+        const plansRes = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"}/meal-plans`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+        const plansData = await plansRes.json();
+        setMealPlans(
+          Array.isArray(plansData)
+            ? plansData.map((plan: any) => ({
+                id: plan._id || plan.id,
+                date: plan.date,
+                breakfast: plan.breakfast,
+                lunch: plan.lunch,
+                dinner: plan.dinner,
+                snacks: plan.snacks,
+              }))
+            : []
+        );
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to load recipes or meal plans.",
+          variant: "destructive",
+        });
+      }
+    };
 
-    setRecipes(mockRecipes);
-    setMealPlans(mockMealPlans);
-  }, []);
+    if (token) fetchData();
+  }, [token, toast]);
 
   const getWeekDates = (startDate: Date) => {
     const dates = [];
@@ -188,8 +151,7 @@ export default function MealPlanning() {
   };
 
   const handleCreateRecipe = async (formData: FormData) => {
-    const newRecipe: Recipe = {
-      id: Date.now().toString(),
+    const newRecipe = {
       name: formData.get("name") as string,
       description: formData.get("description") as string,
       prepTime: Number.parseInt(formData.get("prepTime") as string),
@@ -207,35 +169,101 @@ export default function MealPlanning() {
       category: formData.get("category") as string,
     };
 
-    setRecipes((prev) => [newRecipe, ...prev]);
-    setIsCreateRecipeOpen(false);
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"}/recipes`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(newRecipe),
+        }
+      );
+      if (!res.ok) throw new Error("Failed to create recipe");
+      const created = await res.json();
+      setRecipes((prev) => [
+        {
+          ...created,
+          id: created._id || created.id,
+        },
+        ...prev,
+      ]);
+      setIsCreateRecipeOpen(false);
+      toast({ title: "Success", description: "Recipe created successfully!" });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to create recipe.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleAssignMeal = (recipe: Recipe) => {
+  const handleAssignMeal = async (recipe: Recipe) => {
     if (!selectedMealSlot) return;
 
-    setMealPlans((prev) => {
-      const existingPlan = prev.find(
+    try {
+      // Find if a meal plan exists for the date
+      const existingPlan = mealPlans.find(
         (plan) => plan.date === selectedMealSlot.date
       );
-
+      let updatedPlan: MealPlan;
       if (existingPlan) {
-        return prev.map((plan) =>
-          plan.date === selectedMealSlot.date
-            ? { ...plan, [selectedMealSlot.type]: recipe }
-            : plan
+        updatedPlan = {
+          ...existingPlan,
+          [selectedMealSlot.type]: recipe,
+        };
+        // Update backend
+        await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"}/meal-plans/${existingPlan.id}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(updatedPlan),
+          }
+        );
+        setMealPlans((prev) =>
+          prev.map((plan) =>
+            plan.id === existingPlan.id ? updatedPlan : plan
+          )
         );
       } else {
-        const newPlan: MealPlan = {
-          id: Date.now().toString(),
+        // Create new meal plan for the date
+        const newPlan = {
           date: selectedMealSlot.date,
           [selectedMealSlot.type]: recipe,
         };
-        return [...prev, newPlan];
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"}/meal-plans`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(newPlan),
+          }
+        );
+        const created = await res.json();
+        setMealPlans((prev) => [
+          ...prev,
+          { ...created, id: created._id || created.id },
+        ]);
       }
-    });
-
-    setSelectedMealSlot(null);
+      setSelectedMealSlot(null);
+      toast({ title: "Success", description: "Meal assigned!" });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to assign meal.",
+        variant: "destructive",
+      });
+    }
   };
 
   const weekDates = getWeekDates(selectedWeek);

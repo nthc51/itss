@@ -96,28 +96,31 @@ export default function ShoppingLists() {
       // Ensure data is properly formatted
       const formattedData = Array.isArray(data)
         ? (data as any[]).map((raw) => ({
-            // pull out _id into .id for React keys
-            id: raw._id as string,
-
-            // normalize title → name for display
-            name: raw.title as string,
-            title: raw.title as string,
-            type: raw.type as "daily" | "weekly",
-            date: (raw.startDate || raw.date) as string,
-
-            // ensure arrays
-            items: Array.isArray(raw.items) ? raw.items : [],
+            id: raw._id || raw.id,
+            name: raw.title || raw.name,
+            title: raw.title,
+            type: raw.type,
+            date: raw.startDate || raw.date,
+            items: Array.isArray(raw.items)
+              ? raw.items.map((item: any) => ({
+                  id: item._id || item.id,
+                  name: item.name,
+                  quantity: item.quantity,
+                  category: item.category,
+                  completed: item.completed,
+                  addedBy:
+                    typeof item.addedBy === "object" && item.addedBy?.fullName
+                      ? item.addedBy.fullName
+                      : item.addedBy || "Unknown",
+                }))
+              : [],
             sharedWith: Array.isArray(raw.sharedWithGroup ?? raw.sharedWith)
               ? raw.sharedWithGroup ?? raw.sharedWith
               : [],
-
-            // IMPORTANT: coalesce populated object into a string
             createdBy:
-              typeof raw.createdBy === "object" && raw.createdBy.fullName
+              typeof raw.createdBy === "object" && raw.createdBy?.fullName
                 ? raw.createdBy.fullName
-                : (raw.createdBy as string) || "Unknown",
-
-            // defaults for your progress bar
+                : raw.createdBy || "Unknown",
             completedItems: raw.completedItems || 0,
             totalItems:
               raw.totalItems ||
@@ -132,7 +135,6 @@ export default function ShoppingLists() {
         description: "Failed to load shopping lists. Please try again.",
         variant: "destructive",
       });
-      // Set empty array on error
       setLists([]);
     } finally {
       setIsLoading(false);
@@ -142,16 +144,16 @@ export default function ShoppingLists() {
   const handleCreateList = async (formData: FormData) => {
     try {
       const newList = {
-        title: formData.get("name") as string, // Backend expects 'title'
+        title: formData.get("name") as string,
         type: formData.get("type") as "daily" | "weekly",
-        startDate: formData.get("date") as string, // Backend expects 'startDate'
-        endDate: formData.get("date") as string, // You might want to calculate end date based on type
+        startDate: formData.get("date") as string,
+        endDate: formData.get("date") as string,
       };
 
       const createdList = await shoppingListsApi.create(newList);
       const formattedList = {
         ...createdList,
-        name: createdList.title, // Map title back to name for frontend display
+        name: createdList.title,
         items: createdList.items || [],
         sharedWith: createdList.sharedWithGroup || [],
         createdBy: createdList.createdBy || "You",
@@ -175,29 +177,32 @@ export default function ShoppingLists() {
     }
   };
 
+  // Add item by updating the whole list
   const handleAddItem = async (formData: FormData) => {
     if (!selectedList) return;
 
     try {
-      const newItem = {
+      const newItem: ShoppingItem = {
+        id: crypto.randomUUID(),
         name: formData.get("itemName") as string,
         quantity: formData.get("quantity") as string,
         category: formData.get("category") as string,
+        completed: false,
+        addedBy: "You",
       };
 
-      const addedItem = await shoppingListsApi.addItem(
-        selectedList.id,
-        newItem
-      );
+      const updatedItems = [...selectedList.items, newItem];
+      const updatedList = { ...selectedList, items: updatedItems };
 
-      // Update the lists state with the new item
+      await shoppingListsApi.update(selectedList.id, updatedList);
+
       setLists((prev) =>
         prev.map((list) =>
           list.id === selectedList.id
             ? {
                 ...list,
-                items: [...(list.items || []), addedItem],
-                totalItems: (list.totalItems || 0) + 1,
+                items: updatedItems,
+                totalItems: updatedItems.length,
               }
             : list
         )
@@ -218,37 +223,32 @@ export default function ShoppingLists() {
     }
   };
 
+  // Toggle item complete by updating the whole list
   const toggleItemComplete = async (
     listId: string,
     itemId: string,
     completed: boolean
   ) => {
+    const list = lists.find((l) => l.id === listId);
+    if (!list) return;
+    const updatedItems = list.items.map((item) =>
+      item.id === itemId ? { ...item, completed: !completed } : item
+    );
+    const updatedList = { ...list, items: updatedItems };
     try {
-      await shoppingListsApi.updateItem(listId, itemId, {
-        completed: !completed,
-      });
-
-      // Update local state
+      await shoppingListsApi.update(listId, updatedList);
       setLists((prev) =>
-        prev.map((list) => {
-          if (list.id === listId) {
-            const updatedItems = (list.items || []).map((item) =>
-              item.id === itemId ? { ...item, completed: !completed } : item
-            );
-            const completedCount = updatedItems.filter(
-              (item) => item.completed
-            ).length;
-            return {
-              ...list,
-              items: updatedItems,
-              completedItems: completedCount,
-            };
-          }
-          return list;
-        })
+        prev.map((l) =>
+          l.id === listId
+            ? {
+                ...l,
+                items: updatedItems,
+                completedItems: updatedItems.filter((i) => i.completed).length,
+              }
+            : l
+        )
       );
     } catch (error) {
-      console.error("Failed to update item:", error);
       toast({
         title: "Error",
         description: "Failed to update item. Please try again.",
@@ -257,14 +257,11 @@ export default function ShoppingLists() {
     }
   };
 
-  // Safe filtering with null checks
   const filteredLists = lists.filter((list) => {
-    // coalesce to an empty string if both name and title are falsy
     const text = (list.name || list.title || "").toLowerCase();
     return text.includes(searchTerm.toLowerCase());
   });
 
-  // Don't render until mounted to avoid hydration issues
   if (!isMounted) {
     return null;
   }

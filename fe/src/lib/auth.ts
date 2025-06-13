@@ -18,6 +18,7 @@ export interface User {
 export interface AuthResponse {
   message: string;
   user: User;
+  token: string;
 }
 
 // Helper function to determine if input is email or username
@@ -31,12 +32,9 @@ export async function login(
 ): Promise<AuthResponse> {
   const url = `${API_BASE_URL}/auth/login`;
 
-  // Your backend expects email, so if username is provided, we need to handle it
   const requestBody = isEmail(identifier)
     ? { email: identifier, password }
     : { username: identifier, password };
-
-  console.log("Login request:", { url, body: requestBody });
 
   try {
     const response = await fetch(url, {
@@ -53,13 +51,17 @@ export async function login(
         const errorData = await response.json();
         errorMessage = errorData.message || errorMessage;
       } catch (e) {
-        // If parsing fails, use default error message
+        // fallback
       }
       throw new ApiError(response.status, errorMessage);
     }
 
     const data = await response.json();
-    console.log("Login response:", data);
+
+    // Store JWT token in localStorage
+    if (data.token) {
+      localStorage.setItem("token", data.token);
+    }
 
     return {
       message: data.message,
@@ -70,9 +72,9 @@ export async function login(
         email: data.user.email,
         role: data.user.role,
       },
+      token: data.token,
     };
   } catch (error) {
-    console.error("Login error:", error);
     if (error instanceof ApiError) {
       throw error;
     }
@@ -99,8 +101,6 @@ export async function register(
     role: "HOMEMAKER", // Default role
   };
 
-  console.log("Register request:", { url, body: requestBody });
-
   try {
     const response = await fetch(url, {
       method: "POST",
@@ -116,13 +116,17 @@ export async function register(
         const errorData = await response.json();
         errorMessage = errorData.message || errorMessage;
       } catch (e) {
-        // If parsing fails, use default error message
+        // fallback
       }
       throw new ApiError(response.status, errorMessage);
     }
 
     const data = await response.json();
-    console.log("Register response:", data);
+
+    // Store JWT token in localStorage
+    if (data.token) {
+      localStorage.setItem("token", data.token);
+    }
 
     return {
       message: data.message,
@@ -133,9 +137,9 @@ export async function register(
         email: data.user.email,
         role: data.user.role,
       },
+      token: data.token,
     };
   } catch (error) {
-    console.error("Register error:", error);
     if (error instanceof ApiError) {
       throw error;
     }
@@ -144,18 +148,4 @@ export async function register(
       error instanceof Error ? error.message : "Network error"
     );
   }
-}
-
-export async function getCurrentUser(): Promise<User> {
-  // Since your backend doesn't have JWT, we'll get user from localStorage
-  const userData = localStorage.getItem("user");
-  if (!userData) {
-    throw new ApiError(401, "No user data found");
-  }
-  return JSON.parse(userData);
-}
-
-export async function logout(): Promise<void> {
-  // Since there's no backend logout endpoint, just clear local storage
-  localStorage.removeItem("user");
 }

@@ -1,6 +1,8 @@
 import { ApiError } from "./auth";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+// Point all requests to the backend API prefix
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
 
 // Get current user ID from localStorage
 function getCurrentUserId(): string | null {
@@ -15,43 +17,34 @@ function getCurrentUserId(): string | null {
   }
 }
 
-// Generic API request function with error handling
+// Generic API request with built‑in error handling
 async function apiRequest<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
-
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(options.headers as Record<string, string>),
   };
-
-  const config: RequestInit = {
-    ...options,
-    headers,
-  };
+  const config: RequestInit = { ...options, headers };
 
   try {
     const response = await fetch(url, config);
-
     if (!response.ok) {
       let errorMessage = `HTTP error! status: ${response.status}`;
       try {
         const errorData = await response.json();
         errorMessage = errorData.message || errorMessage;
-      } catch (e) {
-        // If parsing fails, use default error message
+      } catch {
+        // fallback
       }
-
       throw new ApiError(response.status, errorMessage);
     }
-
     if (response.status === 204) {
       return {} as T;
     }
-
-    return await response.json();
+    return (await response.json()) as T;
   } catch (error) {
     if (error instanceof ApiError) {
       throw error;
@@ -72,7 +65,7 @@ export const shoppingListsApi = {
     ).then((lists) =>
       lists.map((list) => ({
         ...list,
-        name: list.title, // Map title to name for frontend
+        name: list.title,
         sharedWith: list.sharedWithGroup || [],
         completedItems: 0,
         totalItems: list.items ? list.items.length : 0,
@@ -84,11 +77,7 @@ export const shoppingListsApi = {
     const userId = getCurrentUserId();
     return apiRequest<any>("/shopping-lists", {
       method: "POST",
-      body: JSON.stringify({
-        ...data,
-        createdBy: userId,
-        items: [], // Initialize with empty items array
-      }),
+      body: JSON.stringify({ ...data, createdBy: userId, items: [] }),
     });
   },
   update: (id: string, data: any) =>
@@ -97,40 +86,25 @@ export const shoppingListsApi = {
       body: JSON.stringify(data),
     }),
   delete: (id: string) =>
-    apiRequest<void>(`/shopping-lists/${id}`, {
-      method: "DELETE",
-    }),
-  addItem: (listId: string, item: any) =>
-    apiRequest<any>(`/shopping-lists/${listId}/items`, {
-      method: "POST",
-      body: JSON.stringify(item),
-    }),
-  updateItem: (listId: string, itemId: string, data: any) =>
-    apiRequest<any>(`/shopping-lists/${listId}/items/${itemId}`, {
-      method: "PUT",
-      body: JSON.stringify(data),
-    }),
-  deleteItem: (listId: string, itemId: string) =>
-    apiRequest<void>(`/shopping-lists/${listId}/items/${itemId}`, {
+    apiRequest<{ message: string }>(`/shopping-lists/${id}`, {
       method: "DELETE",
     }),
 };
 
-// Food Items API (Fridge) - change back to pantry-items
+// Food Items API (Fridge)
 export const foodItemsApi = {
   getAll: () => {
     const userId = getCurrentUserId();
-    return apiRequest<any[]>(`/pantry-items${userId ? `?userId=${userId}` : ""}`);
+    return apiRequest<any[]>(
+      `/pantry-items${userId ? `?userId=${userId}` : ""}`
+    );
   },
   getById: (id: string) => apiRequest<any>(`/pantry-items/${id}`),
   create: (data: any) => {
     const userId = getCurrentUserId();
     return apiRequest<any>("/pantry-items", {
       method: "POST",
-      body: JSON.stringify({
-        ...data,
-        ownedBy: userId,
-      }),
+      body: JSON.stringify({ ...data, ownedBy: userId }),
     });
   },
   update: (id: string, data: any) =>
@@ -139,14 +113,23 @@ export const foodItemsApi = {
       body: JSON.stringify(data),
     }),
   delete: (id: string) =>
-    apiRequest<void>(`/pantry-items/${id}`, {
+    apiRequest<{ message: string }>(`/pantry-items/${id}`, {
       method: "DELETE",
     }),
   getExpiring: (days = 3) => {
     const userId = getCurrentUserId();
     return apiRequest<any[]>(
-      `/pantry-items/expiring-soon${userId ? `?userId=${userId}&daysThreshold=${days}` : ""
+      `/pantry-items/expiring-soon${
+        userId
+          ? `?userId=${userId}&daysThreshold=${days}`
+          : `?daysThreshold=${days}`
       }`
+    );
+  },
+  getExpired: () => {
+    const userId = getCurrentUserId();
+    return apiRequest<any[]>(
+      `/pantry-items/expired${userId ? `?userId=${userId}` : ""}`
     );
   },
 };
@@ -160,9 +143,10 @@ export const mealPlansApi = {
   getByDateRange: (startDate: string, endDate: string) => {
     const userId = getCurrentUserId();
     return apiRequest<any[]>(
-      `/meal-plans${userId
-        ? `?userId=${userId}&start=${startDate}&end=${endDate}`
-        : `?start=${startDate}&end=${endDate}`
+      `/meal-plans${
+        userId
+          ? `?userId=${userId}&start=${startDate}&end=${endDate}`
+          : `?start=${startDate}&end=${endDate}`
       }`
     );
   },
@@ -170,10 +154,7 @@ export const mealPlansApi = {
     const userId = getCurrentUserId();
     return apiRequest<any>("/meal-plans", {
       method: "POST",
-      body: JSON.stringify({
-        ...data,
-        createdBy: userId,
-      }),
+      body: JSON.stringify({ ...data, createdBy: userId }),
     });
   },
   update: (id: string, data: any) =>
@@ -182,7 +163,7 @@ export const mealPlansApi = {
       body: JSON.stringify(data),
     }),
   delete: (id: string) =>
-    apiRequest<void>(`/meal-plans/${id}`, {
+    apiRequest<{ message: string }>(`/meal-plans/${id}`, {
       method: "DELETE",
     }),
   getSuggestions: () => {
@@ -201,10 +182,7 @@ export const recipesApi = {
     const userId = getCurrentUserId();
     return apiRequest<any>("/recipes", {
       method: "POST",
-      body: JSON.stringify({
-        ...data,
-        createdBy: userId,
-      }),
+      body: JSON.stringify({ ...data, createdBy: userId }),
     });
   },
   update: (id: string, data: any) =>
@@ -213,59 +191,27 @@ export const recipesApi = {
       body: JSON.stringify(data),
     }),
   delete: (id: string) =>
-    apiRequest<void>(`/recipes/${id}`, {
+    apiRequest<{ message: string }>(`/recipes/${id}`, {
       method: "DELETE",
     }),
-  getFavorites: () => apiRequest<any[]>("/recipes/favorites"),
-  getPopular: () => apiRequest<any[]>("/recipes/popular"),
-  getSuggestions: (ingredients: string[]) =>
-    apiRequest<any[]>("/recipes/suggestions", {
-      method: "POST",
-      body: JSON.stringify({ ingredients }),
-    }),
 };
 
-// Reports API (you'll need to create these endpoints in your backend)
-export const reportsApi = {
-  getPurchaseStats: (timeRange: string) =>
-    apiRequest<any>(`/reports/purchases?range=${timeRange}`),
-  getWasteStats: (timeRange: string) =>
-    apiRequest<any>(`/reports/waste?range=${timeRange}`),
-  getConsumptionTrends: () => apiRequest<any[]>("/reports/consumption-trends"),
-  getCategoryBreakdown: (month: string) =>
-    apiRequest<any>(`/reports/categories?month=${month}`),
-};
-
-// User API
-export const userApi = {
-  getProfile: () => apiRequest<any>("/users/profile"),
-  updateProfile: (data: any) =>
-    apiRequest<any>("/users/profile", {
-      method: "PUT",
-      body: JSON.stringify(data),
-    }),
-  changePassword: (data: any) =>
-    apiRequest<any>("/users/change-password", {
-      method: "PUT",
-      body: JSON.stringify(data),
-    }),
-};
-
-// Family API
-export const familyApi = {
-  getMembers: () => apiRequest<any[]>("/family/members"),
-  addMember: (data: any) =>
-    apiRequest<any>("/family/members", {
+// Auth API
+export const authApi = {
+  register: (data: {
+    username: string;
+    password: string;
+    fullName: string;
+    email: string;
+    role?: string;
+  }) =>
+    apiRequest<any>("/auth/register", {
       method: "POST",
       body: JSON.stringify(data),
     }),
-  updateMember: (id: string, data: any) =>
-    apiRequest<any>(`/family/members/${id}`, {
-      method: "PUT",
+  login: (data: { email: string; password: string }) =>
+    apiRequest<any>("/auth/login", {
+      method: "POST",
       body: JSON.stringify(data),
-    }),
-  deleteMember: (id: string) =>
-    apiRequest<void>(`/family/members/${id}`, {
-      method: "DELETE",
     }),
 };

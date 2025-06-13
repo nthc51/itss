@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ChefHat, Search, Lightbulb, Users, ShoppingCart } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
+import { useAuth } from "@/contexts/auth-context";
 import { mealPlansApi, foodItemsApi } from "@/lib/api-service";
 
 interface FoodItem {
@@ -42,40 +43,36 @@ interface SuggestedRecipe {
 export default function SmartSuggestions() {
   const [availableFood, setAvailableFood] = useState<FoodItem[]>([]);
   const [selectedIngredients, setSelectedIngredients] = useState<string[]>([]);
-  const [suggestedRecipes, setSuggestedRecipes] = useState<SuggestedRecipe[]>(
-    []
-  );
+  const [suggestedRecipes, setSuggestedRecipes] = useState<SuggestedRecipe[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterDifficulty, setFilterDifficulty] = useState("all");
   const [isLoading, setIsLoading] = useState(true);
   const [isMounted, setIsMounted] = useState(false);
   const { toast } = useToast();
+  const { token } = useAuth();
 
   useEffect(() => {
     setIsMounted(true);
     fetchData();
+    // eslint-disable-next-line
   }, []);
 
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      // Fetch available food items
+      // Fetch available food items with JWT
       const foodData = await foodItemsApi.getAll();
       const formattedFood = Array.isArray(foodData)
         ? foodData.map(formatFoodItem)
         : [];
       setAvailableFood(formattedFood);
 
-      // Fetch meal suggestions
+      // Fetch meal suggestions with JWT
       const suggestions = await mealPlansApi.getSuggestions();
       setSuggestedRecipes(Array.isArray(suggestions) ? suggestions : []);
 
       // Auto-select some ingredients
-      setSelectedIngredients(
-        formattedFood.slice(0, 4).map((item) => item.name)
-      );
+      setSelectedIngredients(formattedFood.slice(0, 4).map((item) => item.name));
     } catch (error) {
-      console.error("Failed to fetch data:", error);
       toast({
         title: "Error",
         description: "Failed to load suggestions. Please try again.",
@@ -120,9 +117,7 @@ export default function SmartSuggestions() {
     return null;
   }
 
-  const expiringFood = availableFood.filter(
-    (item) => item.daysUntilExpiry <= 3
-  );
+  const expiringFood = availableFood.filter((item) => item.daysUntilExpiry <= 3);
 
   const filteredSuggestions = suggestedRecipes.filter((suggestion) => {
     const matchesSearch = suggestion.recipe.title
