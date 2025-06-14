@@ -26,20 +26,7 @@ const userSchema = new Schema(
   { timestamps: true }
 );
 
-
-
 // 2.2. Admin is a special User (just another document with role = 'ADMIN').
-//     If you want a separate model, you can use discriminate(), but usually
-//     storing role: 'ADMIN' inside the same collection is enough.
-
-/* Example with discriminator (optional):
-const Admin = userSchema.discriminator(
-  'Admin',
-  new Schema({
-    // any admin‐specific fields (none for now)
-  })
-);
-*/
 
 // 2.3. FoodCategory schema
 const foodCategorySchema = new Schema(
@@ -73,11 +60,13 @@ const shoppingListItemSchema = new Schema(
 // 2.6. ShoppingList schema
 const shoppingListSchema = new Schema(
   {
-    title: { type: String, required: true, trim: true },
+    // ĐÃ SỬA: Đổi 'title' thành 'name' để khớp với request body của bạn
+    name: { type: String, required: true, trim: true },
     startDate: { type: Date, default: Date.now },
     endDate: { type: Date },
     items: [shoppingListItemSchema], // embed items as sub-documents
-    createdBy: { type: Types.ObjectId, ref: 'User', required: true },
+    // ĐÃ SỬA: Đổi 'createdBy' thành 'ownedBy' để nhất quán
+    ownedBy: { type: Types.ObjectId, ref: 'User', required: true },
     sharedWithGroup: { type: Types.ObjectId, ref: 'FamilyGroup' },
   },
   { timestamps: true }
@@ -102,6 +91,7 @@ const pantryItemSchema = new Schema(
     expirationDate: { type: Date, required: true },
     location: { type: String, trim: true, default: '' },
     category: { type: Types.ObjectId, ref: 'FoodCategory', required: true },
+    // ĐÃ KIỂM TRA: Đã là 'ownedBy', không cần thay đổi
     ownedBy: { type: Types.ObjectId, ref: 'User', required: true },
   },
   { timestamps: true }
@@ -125,7 +115,8 @@ const recipeSchema = new Schema(
     instructions: { type: String, trim: true },
     servings: { type: Number, default: 1, min: 1 },
     ingredients: [recipeIngredientSchema], // embed as sub-documents
-    createdBy: { type: Types.ObjectId, ref: 'User', required: true },
+    // ĐÃ KIỂM TRA: Đã là 'ownedBy', không cần thay đổi
+    ownedBy: { type: Types.ObjectId, ref: 'User', required: true },
   },
   { timestamps: true }
 );
@@ -133,10 +124,12 @@ const recipeSchema = new Schema(
 // 2.11. MealPlan schema
 const mealPlanSchema = new Schema(
   {
+    title: { type: String, required: true, trim: true }, // Thêm lại trường title cho MealPlan nếu cần, hoặc bỏ nếu không dùng
     date: { type: Date, required: true },
     type: { type: String, required: true, enum: PLAN_TYPES, default: 'DAILY' },
     recipes: [{ type: Types.ObjectId, ref: 'Recipe' }],
-    createdBy: { type: Types.ObjectId, ref: 'User', required: true },
+    // ĐÃ SỬA: Đổi 'createdBy' thành 'ownedBy' để nhất quán
+    ownedBy: { type: Types.ObjectId, ref: 'User', required: true },
   },
   { timestamps: true }
 );
@@ -144,6 +137,7 @@ const mealPlanSchema = new Schema(
 // 2.12. Notification schema
 const notificationSchema = new Schema(
   {
+    // ĐÃ KIỂM TRA: 'user' là phù hợp cho Notification (người nhận thông báo), không cần thay đổi
     user: { type: Types.ObjectId, ref: 'User', required: true },
     message: { type: String, required: true, trim: true },
     sendDate: { type: Date, default: Date.now },
@@ -155,6 +149,7 @@ const notificationSchema = new Schema(
 // 2.13. Report schema
 const reportSchema = new Schema(
   {
+    // ĐÃ KIỂM TRA: 'user' là phù hợp cho Report (người tạo/người nhận báo cáo), không cần thay đổi
     user: { type: Types.ObjectId, ref: 'User', required: true },
     generatedDate: { type: Date, default: Date.now },
     type: { type: String, required: true, enum: REPORT_TYPES },
@@ -184,10 +179,8 @@ const MealPlan = model('MealPlan', mealPlanSchema);
 const Notification = model('Notification', notificationSchema);
 const Report = model('Report', reportSchema);
 
-// Optionally export subdocument schemas if you need to reference them elsewhere:
 module.exports = {
   User,
-  // Admin can be created simply by: new User({ ..., role: 'ADMIN' })
   FoodCategory,
   Unit,
   FamilyGroup,

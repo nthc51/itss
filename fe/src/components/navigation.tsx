@@ -57,7 +57,7 @@ export function Navigation() {
         {isAuthenticated ? (
           <>
             <span className="text-sm hidden md:inline mr-2">
-              Hello, {user?.name}
+              Hello, {user?.fullName || user?.username}
             </span>
             <Button variant="outline" size="sm" onClick={logout}>
               <LogOut className="h-4 w-4 mr-2" />

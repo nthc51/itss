@@ -17,8 +17,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
-import { Eye, EyeOff } from "lucide-react";
 
 const loginSchema = z.object({
   identifier: z.string().min(1, "Email or username is required"),
@@ -28,10 +28,11 @@ const loginSchema = z.object({
 type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
-  const { login } = useAuth();
   const router = useRouter();
+  const { login } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const {
     register,
@@ -46,12 +47,13 @@ export default function LoginPage() {
   });
 
   const onSubmit = async (data: LoginFormValues) => {
+    setErrorMsg(null);
+    setIsLoading(true);
     try {
-      setIsLoading(true);
-      await login(data.identifier, data.password);
+      await login(data.identifier, data.password); // use context login
       router.push("/");
-    } catch (error) {
-      console.error("Login submission error:", error);
+    } catch (error: any) {
+      setErrorMsg(error.message || "Login failed");
       setIsLoading(false);
     }
   };
@@ -75,6 +77,7 @@ export default function LoginPage() {
                 placeholder="Enter your email or username"
                 {...register("identifier")}
                 disabled={isLoading}
+                autoComplete="username"
               />
               {errors.identifier && (
                 <p className="text-sm text-red-500">
@@ -91,6 +94,7 @@ export default function LoginPage() {
                   placeholder="Enter your password"
                   {...register("password")}
                   disabled={isLoading}
+                  autoComplete="current-password"
                 />
                 <Button
                   type="button"
@@ -98,6 +102,8 @@ export default function LoginPage() {
                   size="sm"
                   className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
                   onClick={() => setShowPassword(!showPassword)}
+                  tabIndex={-1}
+                  disabled={isLoading}
                 >
                   {showPassword ? (
                     <EyeOff className="h-4 w-4" />
@@ -115,8 +121,18 @@ export default function LoginPage() {
                 </p>
               )}
             </div>
+            {errorMsg && (
+              <p className="text-sm text-red-500 text-center">{errorMsg}</p>
+            )}
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? "Signing In..." : "Sign In"}
+              {isLoading ? (
+                <>
+                  <Loader2 className="animate-spin h-4 w-4 mr-2 inline" />
+                  Signing In...
+                </>
+              ) : (
+                "Sign In"
+              )}
             </Button>
           </form>
         </CardContent>

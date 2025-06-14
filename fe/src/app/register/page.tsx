@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/card";
 import { useAuth } from "@/contexts/auth-context";
 import { Eye, EyeOff } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
 
 const registerSchema = z
   .object({
@@ -36,11 +37,11 @@ const registerSchema = z
 type RegisterFormValues = z.infer<typeof registerSchema>;
 
 export default function RegisterPage() {
-  const { register: registerUser } = useAuth();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const { toast } = useToast();
 
   const {
     register,
@@ -60,15 +61,34 @@ export default function RegisterPage() {
   const onSubmit = async (data: RegisterFormValues) => {
     try {
       setIsLoading(true);
-      await registerUser(
-        data.username,
-        data.email,
-        data.password,
-        data.fullName
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"}/auth/register`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: data.username,
+            fullName: data.fullName,
+            email: data.email,
+            password: data.password,
+          }),
+        }
       );
-      router.push("/");
-    } catch (error) {
-      console.error("Registration submission error:", error);
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Registration failed");
+      }
+      toast({
+        title: "Success",
+        description: "Account created! You can now sign in.",
+      });
+      router.push("/login");
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Registration failed.",
+        variant: "destructive",
+      });
       setIsLoading(false);
     }
   };

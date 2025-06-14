@@ -1,11 +1,24 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { useState, useEffect } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -14,113 +27,231 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Plus, Search, Edit, Trash2, Eye } from "lucide-react"
-import Link from "next/link"
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Plus, Search, Edit, Trash2, Eye } from "lucide-react";
+import Link from "next/link";
+import { useToast } from "@/components/ui/use-toast";
+import { useAuth } from "@/contexts/auth-context";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
-interface DataRecord {
-  id: string
-  title: string
-  description: string
-  status: "active" | "inactive" | "pending"
-  createdAt: string
-  updatedAt: string
+// Pantry item interface matches backend
+interface PantryItem {
+  id: string;
+  name: string;
+  quantity: number;
+  unit: { _id: string; name: string; abbreviation: string } | string;
+  category: { _id: string; name: string } | string;
+  expirationDate: string;
+  location: string;
+}
+
+interface Category {
+  _id: string;
+  name: string;
+}
+interface Unit {
+  _id: string;
+  name: string;
+  abbreviation: string;
 }
 
 export default function DataManagement() {
-  const [records, setRecords] = useState<DataRecord[]>([])
-  const [searchTerm, setSearchTerm] = useState("")
-  const [isLoading, setIsLoading] = useState(true)
-  const [selectedRecord, setSelectedRecord] = useState<DataRecord | null>(null)
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [items, setItems] = useState<PantryItem[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [units, setUnits] = useState<Unit[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedItem, setSelectedItem] = useState<PantryItem | null>(null);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const { token } = useAuth();
+  const { toast } = useToast();
 
-  // Mock data - replace with actual API calls
+  // Fetch pantry items, categories, and units from backend
   useEffect(() => {
     const fetchData = async () => {
-      setIsLoading(true)
+      setIsLoading(true);
       try {
-        // Replace with actual API call
-        // const response = await fetch('/api/data')
-        // const data = await response.json()
-
-        // Mock data
-        const mockData: DataRecord[] = [
+        // Fetch pantry items
+        const res = await fetch(
+          `${
+            process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+          }/pantry-items`,
           {
-            id: "1",
-            title: "Sample Record 1",
-            description: "This is a sample data record for demonstration",
-            status: "active",
-            createdAt: "2024-01-15T10:30:00Z",
-            updatedAt: "2024-01-15T10:30:00Z",
-          },
-          {
-            id: "2",
-            title: "Sample Record 2",
-            description: "Another sample record with different status",
-            status: "pending",
-            createdAt: "2024-01-14T15:45:00Z",
-            updatedAt: "2024-01-14T15:45:00Z",
-          },
-          {
-            id: "3",
-            title: "Sample Record 3",
-            description: "Inactive record for testing purposes",
-            status: "inactive",
-            createdAt: "2024-01-13T09:15:00Z",
-            updatedAt: "2024-01-13T09:15:00Z",
-          },
-        ]
-
-        setRecords(mockData)
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+        if (!res.ok) throw new Error("Failed to fetch pantry items");
+        const data = await res.json();
+        setItems(
+          Array.isArray(data)
+            ? data.map((item: any) => ({
+                id: item._id || item.id,
+                name: item.name,
+                quantity:
+                  typeof item.quantity === "number"
+                    ? item.quantity
+                    : Number(item.quantity) || 0,
+                unit: item.unit,
+                category: item.category,
+                expirationDate: item.expirationDate,
+                location: item.location,
+              }))
+            : []
+        );
       } catch (error) {
-        console.error("Failed to fetch data:", error)
+        toast({
+          title: "Error",
+          description: "Failed to fetch pantry items.",
+          variant: "destructive",
+        });
+        setItems([]);
       } finally {
-        setIsLoading(false)
+        setIsLoading(false);
       }
+    };
+
+    const fetchCategories = async () => {
+      try {
+        const res = await fetch(
+          `${
+            process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+          }/food-categories`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+        if (!res.ok) throw new Error("Failed to fetch categories");
+        const data = await res.json();
+        setCategories(Array.isArray(data) ? data : []);
+      } catch {
+        setCategories([]);
+      }
+    };
+
+    const fetchUnits = async () => {
+      try {
+        const res = await fetch(
+          `${
+            process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+          }/units`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+        if (!res.ok) throw new Error("Failed to fetch units");
+        const data = await res.json();
+        setUnits(Array.isArray(data) ? data : []);
+      } catch {
+        setUnits([]);
+      }
+    };
+
+    if (token) {
+      fetchData();
+      fetchCategories();
+      fetchUnits();
     }
+  }, [token, toast]);
 
-    fetchData()
-  }, [])
+  const filteredItems = items.filter(
+    (item) =>
+      item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (typeof item.category === "object"
+        ? item.category.name.toLowerCase()
+        : (item.category || "").toLowerCase()
+      ).includes(searchTerm.toLowerCase()) ||
+      (item.location || "").toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
-  const filteredRecords = records.filter(
-    (record) =>
-      record.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      record.description.toLowerCase().includes(searchTerm.toLowerCase()),
-  )
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "active":
-        return "bg-green-100 text-green-800"
-      case "inactive":
-        return "bg-red-100 text-red-800"
-      case "pending":
-        return "bg-yellow-100 text-yellow-800"
-      default:
-        return "bg-gray-100 text-gray-800"
+  const handleCreateItem = async (formData: FormData) => {
+    try {
+      const newItem = {
+        name: formData.get("name") as string,
+        quantity: Number(formData.get("quantity")),
+        unit: formData.get("unit") as string,
+        category: formData.get("category") as string,
+        expirationDate: formData.get("expirationDate") as string,
+        location: formData.get("location") as string,
+      };
+      const res = await fetch(
+        `${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+        }/pantry-items`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(newItem),
+        }
+      );
+      if (!res.ok) throw new Error("Failed to add item");
+      const created = await res.json();
+      setItems((prev) => [
+        {
+          id: created._id || created.id,
+          name: created.name,
+          quantity: created.quantity,
+          unit: created.unit,
+          category: created.category,
+          expirationDate: created.expirationDate,
+          location: created.location,
+        },
+        ...prev,
+      ]);
+      setIsCreateDialogOpen(false);
+      toast({ title: "Success", description: "Item added successfully!" });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to add item.",
+        variant: "destructive",
+      });
     }
-  }
+  };
 
-  const handleCreateRecord = async (formData: FormData) => {
-    // Replace with actual API call
-    const newRecord: DataRecord = {
-      id: Date.now().toString(),
-      title: formData.get("title") as string,
-      description: formData.get("description") as string,
-      status: "pending",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+  const handleDeleteItem = async (id: string) => {
+    try {
+      const res = await fetch(
+        `${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+        }/pantry-items/${id}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      if (!res.ok) throw new Error("Failed to delete item");
+      setItems((prev) => prev.filter((item) => item.id !== id));
+      toast({ title: "Success", description: "Item deleted successfully!" });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete item.",
+        variant: "destructive",
+      });
     }
+  };
 
-    setRecords((prev) => [newRecord, ...prev])
-    setIsCreateDialogOpen(false)
-  }
-
-  const handleDeleteRecord = async (id: string) => {
-    // Replace with actual API call
-    setRecords((prev) => prev.filter((record) => record.id !== id))
+  // Utility to extract unit/category name
+  function extractName(objOrString: any, fallback = ""): string {
+    if (!objOrString) return fallback;
+    if (typeof objOrString === "string") return objOrString;
+    if (typeof objOrString === "object" && objOrString.name)
+      return objOrString.name;
+    return fallback;
   }
 
   return (
@@ -130,8 +261,12 @@ export default function DataManagement() {
         <div className="mb-8">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-4xl font-bold text-slate-900 dark:text-slate-100">Data Management</h1>
-              <p className="text-slate-600 dark:text-slate-400 mt-2">Manage your application data and records</p>
+              <h1 className="text-4xl font-bold text-slate-900 dark:text-slate-100">
+                Pantry Items
+              </h1>
+              <p className="text-slate-600 dark:text-slate-400 mt-2">
+                Manage your pantry/fridge items
+              </p>
             </div>
             <Link href="/">
               <Button variant="outline">Back to Dashboard</Button>
@@ -146,40 +281,110 @@ export default function DataManagement() {
               <div className="relative flex-1 max-w-sm">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                 <Input
-                  placeholder="Search records..."
+                  placeholder="Search items..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
                 />
               </div>
-              <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+              <Dialog
+                open={isCreateDialogOpen}
+                onOpenChange={setIsCreateDialogOpen}
+              >
                 <DialogTrigger asChild>
                   <Button>
                     <Plus className="mr-2 h-4 w-4" />
-                    Add Record
+                    Add Item
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
-                  <form action={handleCreateRecord}>
+                  <form action={handleCreateItem}>
                     <DialogHeader>
-                      <DialogTitle>Create New Record</DialogTitle>
-                      <DialogDescription>Add a new data record to your system.</DialogDescription>
+                      <DialogTitle>Add New Pantry Item</DialogTitle>
+                      <DialogDescription>
+                        Add a new item to your pantry or fridge.
+                      </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
                       <div className="grid gap-2">
-                        <Label htmlFor="title">Title</Label>
-                        <Input id="title" name="title" placeholder="Enter record title" required />
+                        <Label htmlFor="name">Name</Label>
+                        <Input
+                          id="name"
+                          name="name"
+                          placeholder="Enter item name"
+                          required
+                        />
                       </div>
                       <div className="grid gap-2">
-                        <Label htmlFor="description">Description</Label>
-                        <Textarea id="description" name="description" placeholder="Enter record description" rows={3} />
+                        <Label htmlFor="quantity">Quantity</Label>
+                        <Input
+                          id="quantity"
+                          name="quantity"
+                          type="number"
+                          placeholder="e.g., 2"
+                          required
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="unit">Unit</Label>
+                        <Select name="unit" required>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select unit" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {units.map((unit) => (
+                              <SelectItem key={unit._id} value={unit._id}>
+                                {unit.name} ({unit.abbreviation})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="category">Category</Label>
+                        <Select name="category" required>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select category" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {categories.map((category) => (
+                              <SelectItem
+                                key={category._id}
+                                value={category._id}
+                              >
+                                {category.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="expirationDate">Expiration Date</Label>
+                        <Input
+                          id="expirationDate"
+                          name="expirationDate"
+                          type="date"
+                          required
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="location">Location</Label>
+                        <Input
+                          id="location"
+                          name="location"
+                          placeholder="e.g., Main Fridge"
+                        />
                       </div>
                     </div>
                     <DialogFooter>
-                      <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setIsCreateDialogOpen(false)}
+                      >
                         Cancel
                       </Button>
-                      <Button type="submit">Create Record</Button>
+                      <Button type="submit">Add Item</Button>
                     </DialogFooter>
                   </form>
                 </DialogContent>
@@ -191,48 +396,62 @@ export default function DataManagement() {
         {/* Data Table */}
         <Card>
           <CardHeader>
-            <CardTitle>Records ({filteredRecords.length})</CardTitle>
-            <CardDescription>All data records in your system</CardDescription>
+            <CardTitle>Items ({filteredItems.length})</CardTitle>
+            <CardDescription>All pantry/fridge items</CardDescription>
           </CardHeader>
           <CardContent>
             {isLoading ? (
               <div className="text-center py-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
-                <p className="mt-2 text-muted-foreground">Loading records...</p>
+                <p className="mt-2 text-muted-foreground">Loading items...</p>
               </div>
-            ) : filteredRecords.length === 0 ? (
+            ) : filteredItems.length === 0 ? (
               <div className="text-center py-8">
-                <p className="text-muted-foreground">No records found</p>
+                <p className="text-muted-foreground">No items found</p>
               </div>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Title</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Created</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Quantity</TableHead>
+                    <TableHead>Unit</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Expiration</TableHead>
+                    <TableHead>Location</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredRecords.map((record) => (
-                    <TableRow key={record.id}>
-                      <TableCell className="font-medium">{record.title}</TableCell>
-                      <TableCell className="max-w-xs truncate">{record.description}</TableCell>
+                  {filteredItems.map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell className="font-medium">{item.name}</TableCell>
+                      <TableCell>{item.quantity}</TableCell>
+                      <TableCell>{extractName(item.unit, "-")}</TableCell>
+                      <TableCell>{extractName(item.category, "-")}</TableCell>
                       <TableCell>
-                        <Badge className={getStatusColor(record.status)}>{record.status}</Badge>
+                        {item.expirationDate
+                          ? new Date(item.expirationDate).toLocaleDateString()
+                          : "-"}
                       </TableCell>
-                      <TableCell>{new Date(record.createdAt).toLocaleDateString()}</TableCell>
+                      <TableCell>{item.location}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <Button variant="ghost" size="sm" onClick={() => setSelectedRecord(record)}>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setSelectedItem(item)}
+                          >
                             <Eye className="h-4 w-4" />
                           </Button>
                           <Button variant="ghost" size="sm">
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="sm" onClick={() => handleDeleteRecord(record.id)}>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteItem(item.id)}
+                          >
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
@@ -245,41 +464,54 @@ export default function DataManagement() {
           </CardContent>
         </Card>
 
-        {/* View Record Dialog */}
-        <Dialog open={!!selectedRecord} onOpenChange={() => setSelectedRecord(null)}>
+        {/* View Item Dialog */}
+        <Dialog
+          open={!!selectedItem}
+          onOpenChange={() => setSelectedItem(null)}
+        >
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>{selectedRecord?.title}</DialogTitle>
-              <DialogDescription>Record Details</DialogDescription>
+              <DialogTitle>{selectedItem?.name}</DialogTitle>
+              <DialogDescription>Item Details</DialogDescription>
             </DialogHeader>
-            {selectedRecord && (
+            {selectedItem && (
               <div className="grid gap-4 py-4">
                 <div>
-                  <Label className="text-sm font-medium">Description</Label>
-                  <p className="text-sm text-muted-foreground mt-1">{selectedRecord.description}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium">Status</Label>
-                  <div className="mt-1">
-                    <Badge className={getStatusColor(selectedRecord.status)}>{selectedRecord.status}</Badge>
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium">Created</Label>
+                  <Label className="text-sm font-medium">Quantity</Label>
                   <p className="text-sm text-muted-foreground mt-1">
-                    {new Date(selectedRecord.createdAt).toLocaleString()}
+                    {selectedItem.quantity}
                   </p>
                 </div>
                 <div>
-                  <Label className="text-sm font-medium">Last Updated</Label>
+                  <Label className="text-sm font-medium">Unit</Label>
                   <p className="text-sm text-muted-foreground mt-1">
-                    {new Date(selectedRecord.updatedAt).toLocaleString()}
+                    {extractName(selectedItem.unit, "-")}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Category</Label>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {extractName(selectedItem.category, "-")}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Expiration Date</Label>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {selectedItem.expirationDate
+                      ? new Date(selectedItem.expirationDate).toLocaleString()
+                      : "-"}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Location</Label>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {selectedItem.location}
                   </p>
                 </div>
               </div>
             )}
             <DialogFooter>
-              <Button variant="outline" onClick={() => setSelectedRecord(null)}>
+              <Button variant="outline" onClick={() => setSelectedItem(null)}>
                 Close
               </Button>
             </DialogFooter>
@@ -287,5 +519,5 @@ export default function DataManagement() {
         </Dialog>
       </div>
     </div>
-  )
+  );
 }

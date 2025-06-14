@@ -30,217 +30,408 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ChefHat, Clock, Users, Plus, Star, Heart } from "lucide-react";
+import {
+  ChefHat,
+  Clock,
+  Users,
+  Plus,
+  Star,
+  Heart,
+  Edit,
+  Trash2,
+} from "lucide-react";
+import { useAuth } from "@/contexts/auth-context";
+import { useToast } from "@/components/ui/use-toast";
 
-interface Recipe {
-  id: string;
+interface Category {
+  _id: string;
   name: string;
+}
+interface Unit {
+  _id: string;
+  name: string;
+  abbreviation: string;
+}
+interface IngredientInput {
+  name: string;
+  quantity: string;
+  unit: string; // unit _id
+  category: string; // category _id
+}
+interface Recipe {
+  _id: string;
+  title: string;
   description: string;
   prepTime: number;
   cookTime: number;
   servings: number;
-  difficulty: "Easy" | "Medium" | "Hard";
-  ingredients: string[];
-  instructions: string[];
-  isFavorite: boolean;
-  isPopular: boolean;
-  category: string;
+  instructions: string;
+  ingredients: IngredientInput[];
+  category: string; // category _id
 }
-
 interface MealPlan {
   id: string;
+  title: string;
   date: string;
-  breakfast?: Recipe;
-  lunch?: Recipe;
-  dinner?: Recipe;
-  snacks?: Recipe[];
+  type: "DAILY" | "WEEKLY";
+  recipes: { _id: string; title: string }[]; // Array of recipe objects
 }
-
-const mealTypes = ["breakfast", "lunch", "dinner", "snacks"];
-const difficulties = ["Easy", "Medium", "Hard"];
-const categories = ["Main Course", "Appetizer", "Dessert", "Snack", "Beverage"];
 
 export default function MealPlanning() {
   const [mealPlans, setMealPlans] = useState<MealPlan[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
-  const [selectedWeek, setSelectedWeek] = useState(new Date());
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [units, setUnits] = useState<Unit[]>([]);
   const [isCreateRecipeOpen, setIsCreateRecipeOpen] = useState(false);
-  const [selectedMealSlot, setSelectedMealSlot] = useState<{
-    date: string;
-    type: string;
-  } | null>(null);
+  const [ingredientInputs, setIngredientInputs] = useState<IngredientInput[]>([
+    { name: "", quantity: "", unit: "", category: "" },
+  ]);
+  const [isEditRecipeOpen, setIsEditRecipeOpen] = useState(false);
+  const [editRecipe, setEditRecipe] = useState<Recipe | null>(null);
+  const [editIngredientInputs, setEditIngredientInputs] = useState<
+    IngredientInput[]
+  >([]);
+  const [isCreateMealPlanOpen, setIsCreateMealPlanOpen] = useState(false);
+  const [planTitle, setPlanTitle] = useState("");
+  const [planType, setPlanType] = useState<"DAILY" | "WEEKLY">("DAILY");
+  const [planDate, setPlanDate] = useState("");
+  const [selectedRecipes, setSelectedRecipes] = useState<string[]>([]);
+  const { token } = useAuth();
+  const { toast } = useToast();
 
   useEffect(() => {
-    // Mock data - replace with API calls
-    const mockRecipes: Recipe[] = [
-      {
-        id: "1",
-        name: "Scrambled Eggs with Toast",
-        description:
-          "Classic breakfast with fluffy scrambled eggs and buttered toast",
-        prepTime: 5,
-        cookTime: 10,
-        servings: 2,
-        difficulty: "Easy",
-        ingredients: [
-          "4 eggs",
-          "2 slices bread",
-          "2 tbsp butter",
-          "Salt",
-          "Pepper",
-        ],
-        instructions: [
-          "Beat eggs in bowl",
-          "Heat butter in pan",
-          "Cook eggs stirring gently",
-          "Toast bread",
-          "Serve together",
-        ],
-        isFavorite: true,
-        isPopular: true,
-        category: "Main Course",
-      },
-      {
-        id: "2",
-        name: "Chicken Caesar Salad",
-        description:
-          "Fresh romaine lettuce with grilled chicken and caesar dressing",
-        prepTime: 15,
-        cookTime: 20,
-        servings: 4,
-        difficulty: "Medium",
-        ingredients: [
-          "2 chicken breasts",
-          "1 head romaine lettuce",
-          "Caesar dressing",
-          "Parmesan cheese",
-          "Croutons",
-        ],
-        instructions: [
-          "Grill chicken",
-          "Chop lettuce",
-          "Mix with dressing",
-          "Add toppings",
-          "Serve immediately",
-        ],
-        isFavorite: false,
-        isPopular: true,
-        category: "Main Course",
-      },
-      {
-        id: "3",
-        name: "Grilled Salmon with Vegetables",
-        description: "Healthy grilled salmon with seasonal vegetables",
-        prepTime: 10,
-        cookTime: 25,
-        servings: 4,
-        difficulty: "Medium",
-        ingredients: [
-          "4 salmon fillets",
-          "Mixed vegetables",
-          "Olive oil",
-          "Lemon",
-          "Herbs",
-        ],
-        instructions: [
-          "Preheat grill",
-          "Season salmon",
-          "Grill salmon and vegetables",
-          "Serve with lemon",
-        ],
-        isFavorite: true,
-        isPopular: false,
-        category: "Main Course",
-      },
-    ];
+    fetchCategories();
+    fetchUnits();
+    fetchRecipes();
+    fetchMealPlans();
+    // eslint-disable-next-line
+  }, [token]);
 
-    const mockMealPlans: MealPlan[] = [
-      {
-        id: "1",
-        date: "2024-01-15",
-        breakfast: mockRecipes[0],
-        lunch: mockRecipes[1],
-        dinner: mockRecipes[2],
-      },
-      {
-        id: "2",
-        date: "2024-01-16",
-        breakfast: mockRecipes[0],
-        dinner: mockRecipes[2],
-      },
-    ];
-
-    setRecipes(mockRecipes);
-    setMealPlans(mockMealPlans);
-  }, []);
-
-  const getWeekDates = (startDate: Date) => {
-    const dates = [];
-    const start = new Date(startDate);
-    start.setDate(start.getDate() - start.getDay()); // Start from Sunday
-
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(start);
-      date.setDate(start.getDate() + i);
-      dates.push(date);
+  const fetchCategories = async () => {
+    try {
+      const res = await fetch(
+        `${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+        }/food-categories`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const data = await res.json();
+      setCategories(Array.isArray(data) ? data : []);
+    } catch {
+      setCategories([]);
     }
-    return dates;
   };
 
+  const fetchUnits = async () => {
+    try {
+      const res = await fetch(
+        `${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+        }/units`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const data = await res.json();
+      setUnits(Array.isArray(data) ? data : []);
+    } catch {
+      setUnits([]);
+    }
+  };
+
+  const fetchRecipes = async () => {
+    try {
+      const res = await fetch(
+        `${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+        }/recipes`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const data = await res.json();
+      setRecipes(
+        Array.isArray(data)
+          ? data.map((r: any) => ({
+              _id: r._id,
+              title: r.title,
+              description: r.description,
+              prepTime: r.prepTime,
+              cookTime: r.cookTime,
+              servings: r.servings,
+              instructions: r.instructions,
+              ingredients: r.ingredients,
+              category:
+                typeof r.category === "object" ? r.category._id : r.category,
+            }))
+          : []
+      );
+    } catch {
+      setRecipes([]);
+    }
+  };
+
+  const fetchMealPlans = async () => {
+    try {
+      const res = await fetch(
+        `${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+        }/meal-plans`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const data = await res.json();
+      setMealPlans(
+        Array.isArray(data)
+          ? data.map((plan: any) => ({
+              id: plan._id || plan.id,
+              title: plan.title,
+              date: plan.date,
+              type: plan.type,
+              recipes: Array.isArray(plan.recipes)
+                ? plan.recipes.map((r: any) =>
+                    typeof r === "object"
+                      ? { _id: r._id, title: r.title }
+                      : { _id: r, title: "" }
+                  )
+                : [],
+            }))
+          : []
+      );
+    } catch {
+      setMealPlans([]);
+    }
+  };
+
+  // --- Ingredient Dynamic Form ---
+  const handleIngredientChange = (
+    idx: number,
+    field: keyof IngredientInput,
+    value: string
+  ) => {
+    setIngredientInputs((prev) =>
+      prev.map((ing, i) => (i === idx ? { ...ing, [field]: value } : ing))
+    );
+  };
+  const addIngredientRow = () => {
+    setIngredientInputs((prev) => [
+      ...prev,
+      { name: "", quantity: "", unit: "", category: "" },
+    ]);
+  };
+  const removeIngredientRow = (idx: number) => {
+    setIngredientInputs((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  // --- Edit Ingredient Dynamic Form ---
+  const handleEditIngredientChange = (
+    idx: number,
+    field: keyof IngredientInput,
+    value: string
+  ) => {
+    setEditIngredientInputs((prev) =>
+      prev.map((ing, i) => (i === idx ? { ...ing, [field]: value } : ing))
+    );
+  };
+  const addEditIngredientRow = () => {
+    setEditIngredientInputs((prev) => [
+      ...prev,
+      { name: "", quantity: "", unit: "", category: "" },
+    ]);
+  };
+  const removeEditIngredientRow = (idx: number) => {
+    setEditIngredientInputs((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  // --- Create Recipe ---
   const handleCreateRecipe = async (formData: FormData) => {
-    const newRecipe: Recipe = {
-      id: Date.now().toString(),
-      name: formData.get("name") as string,
+    const newRecipe = {
+      title: formData.get("title") as string,
       description: formData.get("description") as string,
-      prepTime: Number.parseInt(formData.get("prepTime") as string),
-      cookTime: Number.parseInt(formData.get("cookTime") as string),
-      servings: Number.parseInt(formData.get("servings") as string),
-      difficulty: formData.get("difficulty") as "Easy" | "Medium" | "Hard",
-      ingredients: (formData.get("ingredients") as string)
-        .split("\n")
-        .filter((i) => i.trim()),
-      instructions: (formData.get("instructions") as string)
-        .split("\n")
-        .filter((i) => i.trim()),
-      isFavorite: false,
-      isPopular: false,
+      prepTime: Number(formData.get("prepTime")),
+      cookTime: Number(formData.get("cookTime")),
+      servings: Number(formData.get("servings")),
+      instructions: (formData.get("instructions") as string).trim(),
+      ingredients: ingredientInputs.map((ing) => ({
+        name: ing.name,
+        quantity: Number(ing.quantity),
+        unit: ing.unit,
+        category: ing.category,
+      })),
       category: formData.get("category") as string,
     };
 
-    setRecipes((prev) => [newRecipe, ...prev]);
-    setIsCreateRecipeOpen(false);
-  };
-
-  const handleAssignMeal = (recipe: Recipe) => {
-    if (!selectedMealSlot) return;
-
-    setMealPlans((prev) => {
-      const existingPlan = prev.find(
-        (plan) => plan.date === selectedMealSlot.date
+    try {
+      const res = await fetch(
+        `${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+        }/recipes`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(newRecipe),
+        }
       );
-
-      if (existingPlan) {
-        return prev.map((plan) =>
-          plan.date === selectedMealSlot.date
-            ? { ...plan, [selectedMealSlot.type]: recipe }
-            : plan
-        );
-      } else {
-        const newPlan: MealPlan = {
-          id: Date.now().toString(),
-          date: selectedMealSlot.date,
-          [selectedMealSlot.type]: recipe,
-        };
-        return [...prev, newPlan];
-      }
-    });
-
-    setSelectedMealSlot(null);
+      if (!res.ok) throw new Error("Failed to create recipe");
+      const created = await res.json();
+      setRecipes((prev) => [
+        {
+          ...created,
+          _id: created._id,
+        },
+        ...prev,
+      ]);
+      setIsCreateRecipeOpen(false);
+      setIngredientInputs([{ name: "", quantity: "", unit: "", category: "" }]);
+      toast({ title: "Success", description: "Recipe created successfully!" });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to create recipe.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const weekDates = getWeekDates(selectedWeek);
-  const favoriteRecipes = recipes.filter((recipe) => recipe.isFavorite);
-  const popularRecipes = recipes.filter((recipe) => recipe.isPopular);
+  // --- Edit Recipe ---
+  useEffect(() => {
+    if (editRecipe) {
+      setEditIngredientInputs(
+        editRecipe.ingredients.map((ing) => ({
+          name: ing.name,
+          quantity: String(ing.quantity),
+          unit: ing.unit,
+          category: ing.category,
+        }))
+      );
+    }
+  }, [editRecipe]);
+
+  const handleEditRecipe = async (formData: FormData) => {
+    if (!editRecipe) return;
+    const updatedRecipe = {
+      title: formData.get("title") as string,
+      description: formData.get("description") as string,
+      prepTime: Number(formData.get("prepTime")),
+      cookTime: Number(formData.get("cookTime")),
+      servings: Number(formData.get("servings")),
+      instructions: (formData.get("instructions") as string).trim(),
+      ingredients: editIngredientInputs.map((ing) => ({
+        name: ing.name,
+        quantity: Number(ing.quantity),
+        unit: ing.unit,
+        category: ing.category,
+      })),
+      category: formData.get("category") as string,
+    };
+    try {
+      const res = await fetch(
+        `${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+        }/recipes/${editRecipe._id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(updatedRecipe),
+        }
+      );
+      if (!res.ok) throw new Error("Failed to update recipe");
+      const updated = await res.json();
+      setRecipes((prev) =>
+        prev.map((r) =>
+          r._id === updated._id ? { ...updated, _id: updated._id } : r
+        )
+      );
+      setIsEditRecipeOpen(false);
+      toast({ title: "Success", description: "Recipe updated!" });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update recipe.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // --- Delete Recipe ---
+  const handleDeleteRecipe = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this recipe?")) return;
+    try {
+      const res = await fetch(
+        `${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+        }/recipes/${id}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      if (!res.ok) throw new Error("Failed to delete recipe");
+      setRecipes((prev) => prev.filter((r) => r._id !== id));
+      toast({ title: "Success", description: "Recipe deleted!" });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete recipe.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // --- Create Meal Plan ---
+  const handleCreateMealPlan = async () => {
+    if (!planTitle || !planDate || selectedRecipes.length === 0) return;
+    const newPlan = {
+      title: planTitle,
+      date: planDate,
+      type: planType,
+      recipes: selectedRecipes,
+    };
+    try {
+      const res = await fetch(
+        `${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+        }/meal-plans`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(newPlan),
+        }
+      );
+      if (!res.ok) throw new Error("Failed to create meal plan");
+      const created = await res.json();
+      setMealPlans((prev) => [
+        ...prev,
+        {
+          ...created,
+          id: created._id || created.id,
+          recipes: Array.isArray(created.recipes)
+            ? created.recipes.map((r: any) =>
+                typeof r === "object"
+                  ? { _id: r._id, title: r.title }
+                  : { _id: r, title: "" }
+              )
+            : [],
+        },
+      ]);
+      setPlanTitle("");
+      setPlanDate("");
+      setPlanType("DAILY");
+      setSelectedRecipes([]);
+      setIsCreateMealPlanOpen(false);
+      toast({ title: "Success", description: "Meal plan created!" });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to create meal plan.",
+        variant: "destructive",
+      });
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 dark:from-slate-900 dark:to-slate-800">
@@ -256,266 +447,50 @@ export default function MealPlanning() {
                 Plan your family's meals and manage recipes
               </p>
             </div>
-            <Dialog
-              open={isCreateRecipeOpen}
-              onOpenChange={setIsCreateRecipeOpen}
-            >
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Recipe
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl">
-                <form action={handleCreateRecipe}>
-                  <DialogHeader>
-                    <DialogTitle>Create New Recipe</DialogTitle>
-                    <DialogDescription>
-                      Add a new recipe to your collection
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="grid gap-4 py-4 max-h-96 overflow-y-auto">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="grid gap-2">
-                        <Label htmlFor="name">Recipe Name</Label>
-                        <Input
-                          id="name"
-                          name="name"
-                          placeholder="e.g., Chicken Stir Fry"
-                          required
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="category">Category</Label>
-                        <Select name="category" required>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select category" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {categories.map((category) => (
-                              <SelectItem key={category} value={category}>
-                                {category}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="description">Description</Label>
-                      <Textarea
-                        id="description"
-                        name="description"
-                        placeholder="Brief description of the recipe"
-                      />
-                    </div>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="grid gap-2">
-                        <Label htmlFor="prepTime">Prep Time (min)</Label>
-                        <Input
-                          id="prepTime"
-                          name="prepTime"
-                          type="number"
-                          placeholder="15"
-                          required
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="cookTime">Cook Time (min)</Label>
-                        <Input
-                          id="cookTime"
-                          name="cookTime"
-                          type="number"
-                          placeholder="30"
-                          required
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="servings">Servings</Label>
-                        <Input
-                          id="servings"
-                          name="servings"
-                          type="number"
-                          placeholder="4"
-                          required
-                        />
-                      </div>
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="difficulty">Difficulty</Label>
-                      <Select name="difficulty" required>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select difficulty" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {difficulties.map((difficulty) => (
-                            <SelectItem key={difficulty} value={difficulty}>
-                              {difficulty}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="ingredients">
-                        Ingredients (one per line)
-                      </Label>
-                      <Textarea
-                        id="ingredients"
-                        name="ingredients"
-                        placeholder="2 chicken breasts&#10;1 cup rice&#10;2 tbsp soy sauce"
-                        rows={4}
-                        required
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="instructions">
-                        Instructions (one per line)
-                      </Label>
-                      <Textarea
-                        id="instructions"
-                        name="instructions"
-                        placeholder="Heat oil in pan&#10;Cook chicken until done&#10;Add vegetables and stir"
-                        rows={4}
-                        required
-                      />
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setIsCreateRecipeOpen(false)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button type="submit">Create Recipe</Button>
-                  </DialogFooter>
-                </form>
-              </DialogContent>
-            </Dialog>
+            <div className="flex gap-2">
+              <Button onClick={() => setIsCreateRecipeOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Recipe
+              </Button>
+              <Button onClick={() => setIsCreateMealPlanOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Create Meal Plan
+              </Button>
+            </div>
           </div>
         </div>
 
         <Tabs defaultValue="weekly" className="space-y-6">
           <TabsList>
-            <TabsTrigger value="weekly">Weekly Plan</TabsTrigger>
+            <TabsTrigger value="weekly">Meal Plans</TabsTrigger>
             <TabsTrigger value="recipes">Recipe Collection</TabsTrigger>
-            <TabsTrigger value="favorites">Favorites</TabsTrigger>
           </TabsList>
 
           <TabsContent value="weekly">
-            {/* Week Navigation */}
-            <div className="flex items-center justify-between mb-6">
-              <Button
-                variant="outline"
-                onClick={() =>
-                  setSelectedWeek(
-                    new Date(selectedWeek.getTime() - 7 * 24 * 60 * 60 * 1000)
-                  )
-                }
-              >
-                Previous Week
-              </Button>
-              <h2 className="text-xl font-semibold">
-                Week of {weekDates[0].toLocaleDateString()}
-              </h2>
-              <Button
-                variant="outline"
-                onClick={() =>
-                  setSelectedWeek(
-                    new Date(selectedWeek.getTime() + 7 * 24 * 60 * 60 * 1000)
-                  )
-                }
-              >
-                Next Week
-              </Button>
-            </div>
-
-            {/* Weekly Calendar */}
-            <div className="grid grid-cols-1 lg:grid-cols-7 gap-4">
-              {weekDates.map((date, index) => {
-                const dateStr = date.toISOString().split("T")[0];
-                const dayPlan = mealPlans.find((plan) => plan.date === dateStr);
-                const dayNames = [
-                  "Sun",
-                  "Mon",
-                  "Tue",
-                  "Wed",
-                  "Thu",
-                  "Fri",
-                  "Sat",
-                ];
-
-                return (
-                  <Card key={index} className="min-h-96">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-center">
-                        {dayNames[index]}
-                      </CardTitle>
-                      <CardDescription className="text-center">
-                        {date.toLocaleDateString()}
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      {mealTypes.slice(0, 3).map((mealType) => (
-                        <div key={mealType} className="border rounded-lg p-3">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium capitalize">
-                              {mealType}
-                            </span>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() =>
-                                setSelectedMealSlot({
-                                  date: dateStr,
-                                  type: mealType,
-                                })
-                              }
-                            >
-                              <Plus className="h-4 w-4" />
-                            </Button>
-                          </div>
-                          {dayPlan?.[mealType as keyof MealPlan] ? (
-                            <div className="text-sm">
-                              <p className="font-medium">
-                                {
-                                  (
-                                    dayPlan[
-                                      mealType as keyof MealPlan
-                                    ] as Recipe
-                                  )?.name
-                                }
-                              </p>
-                              <div className="flex items-center gap-2 mt-1 text-muted-foreground">
-                                <Clock className="h-3 w-3" />
-                                <span>
-                                  {(
-                                    dayPlan[
-                                      mealType as keyof MealPlan
-                                    ] as Recipe
-                                  )?.prepTime +
-                                    (
-                                      dayPlan[
-                                        mealType as keyof MealPlan
-                                      ] as Recipe
-                                    )?.cookTime}{" "}
-                                  min
-                                </span>
-                              </div>
-                            </div>
-                          ) : (
-                            <p className="text-sm text-muted-foreground">
-                              No meal planned
-                            </p>
-                          )}
-                        </div>
-                      ))}
-                    </CardContent>
-                  </Card>
-                );
-              })}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {mealPlans.map((plan) => (
+                <Card key={plan.id}>
+                  <CardHeader>
+                    <CardTitle>{plan.title}</CardTitle>
+                    <CardDescription>
+                      {plan.type} -{" "}
+                      {plan.date
+                        ? new Date(plan.date).toLocaleDateString()
+                        : ""}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div>
+                      <strong>Recipes:</strong>
+                      <ul className="list-disc ml-5">
+                        {plan.recipes.map((r) => (
+                          <li key={r._id}>{r.title}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
           </TabsContent>
 
@@ -523,19 +498,32 @@ export default function MealPlanning() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {recipes.map((recipe) => (
                 <Card
-                  key={recipe.id}
+                  key={recipe._id}
                   className="hover:shadow-lg transition-shadow"
                 >
                   <CardHeader>
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg">{recipe.name}</CardTitle>
-                      <div className="flex gap-1">
-                        {recipe.isFavorite && (
-                          <Heart className="h-4 w-4 text-red-500 fill-current" />
-                        )}
-                        {recipe.isPopular && (
-                          <Star className="h-4 w-4 text-yellow-500 fill-current" />
-                        )}
+                      <CardTitle className="text-lg">{recipe.title}</CardTitle>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => {
+                            setEditRecipe(recipe);
+                            setIsEditRecipeOpen(true);
+                          }}
+                          aria-label="Edit"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="icon"
+                          onClick={() => handleDeleteRecipe(recipe._id)}
+                          aria-label="Delete"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
                     <CardDescription>{recipe.description}</CardDescription>
@@ -553,152 +541,500 @@ export default function MealPlanning() {
                         </div>
                       </div>
                       <div className="flex items-center justify-between">
-                        <Badge variant="outline">{recipe.difficulty}</Badge>
-                        <Badge variant="secondary">{recipe.category}</Badge>
+                        <Badge variant="outline">
+                          {categories.find((c) => c._id === recipe.category)
+                            ?.name || "Unknown"}
+                        </Badge>
                       </div>
-                      <Button
-                        className="w-full"
-                        variant="outline"
-                        onClick={() =>
-                          selectedMealSlot && handleAssignMeal(recipe)
-                        }
-                        disabled={!selectedMealSlot}
-                      >
-                        <ChefHat className="mr-2 h-4 w-4" />
-                        {selectedMealSlot ? "Assign to Meal" : "View Recipe"}
-                      </Button>
+                      <div>
+                        <strong>Ingredients:</strong>
+                        <ul className="list-disc ml-5">
+                          {recipe.ingredients.map((ing, idx) => (
+                            <li key={idx}>
+                              {ing.quantity}{" "}
+                              {units.find((u) => u._id === ing.unit)
+                                ?.abbreviation || "unit"}{" "}
+                              {ing.name} (
+                              {categories.find((c) => c._id === ing.category)
+                                ?.name || "category"}
+                              )
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div>
+                        <strong>Instructions:</strong>
+                        <ol className="list-decimal ml-5">
+                          {recipe.instructions
+                            .split("\n")
+                            .filter((line) => line.trim())
+                            .map((step, idx) => (
+                              <li key={idx}>{step}</li>
+                            ))}
+                        </ol>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
               ))}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="favorites">
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                  <Heart className="h-5 w-5 text-red-500" />
-                  Favorite Recipes
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {favoriteRecipes.map((recipe) => (
-                    <Card
-                      key={recipe.id}
-                      className="hover:shadow-lg transition-shadow"
-                    >
-                      <CardHeader>
-                        <CardTitle className="text-lg">{recipe.name}</CardTitle>
-                        <CardDescription>{recipe.description}</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between text-sm">
-                            <div className="flex items-center gap-2">
-                              <Clock className="h-4 w-4" />
-                              <span>
-                                {recipe.prepTime + recipe.cookTime} min
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Users className="h-4 w-4" />
-                              <span>{recipe.servings} servings</span>
-                            </div>
-                          </div>
-                          <Badge variant="outline">{recipe.difficulty}</Badge>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                  <Star className="h-5 w-5 text-yellow-500" />
-                  Popular Recipes
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {popularRecipes.map((recipe) => (
-                    <Card
-                      key={recipe.id}
-                      className="hover:shadow-lg transition-shadow"
-                    >
-                      <CardHeader>
-                        <CardTitle className="text-lg">{recipe.name}</CardTitle>
-                        <CardDescription>{recipe.description}</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between text-sm">
-                            <div className="flex items-center gap-2">
-                              <Clock className="h-4 w-4" />
-                              <span>
-                                {recipe.prepTime + recipe.cookTime} min
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Users className="h-4 w-4" />
-                              <span>{recipe.servings} servings</span>
-                            </div>
-                          </div>
-                          <Badge variant="outline">{recipe.difficulty}</Badge>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </div>
             </div>
           </TabsContent>
         </Tabs>
 
-        {/* Recipe Selection Dialog */}
+        {/* Create Recipe Dialog */}
+        <Dialog open={isCreateRecipeOpen} onOpenChange={setIsCreateRecipeOpen}>
+          <DialogContent className="max-w-2xl">
+            <form action={handleCreateRecipe}>
+              <DialogHeader>
+                <DialogTitle>Add New Recipe</DialogTitle>
+                <DialogDescription>
+                  Fill in the details to add a new recipe.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="title">Title</Label>
+                  <Input id="title" name="title" required />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea id="description" name="description" />
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <Label htmlFor="prepTime">Prep Time (min)</Label>
+                    <Input
+                      id="prepTime"
+                      name="prepTime"
+                      type="number"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="cookTime">Cook Time (min)</Label>
+                    <Input
+                      id="cookTime"
+                      name="cookTime"
+                      type="number"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="servings">Servings</Label>
+                    <Input
+                      id="servings"
+                      name="servings"
+                      type="number"
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="instructions">Instructions</Label>
+                  <Textarea id="instructions" name="instructions" required />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="category">Category</Label>
+                  <Select name="category" required>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map((cat) => (
+                        <SelectItem key={cat._id} value={cat._id}>
+                          {cat.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Ingredients</Label>
+                  <div className="space-y-2">
+                    {ingredientInputs.map((ing, idx) => (
+                      <div key={idx} className="flex gap-2 items-center">
+                        <Input
+                          placeholder="Name"
+                          value={ing.name}
+                          onChange={(e) =>
+                            handleIngredientChange(idx, "name", e.target.value)
+                          }
+                          required
+                        />
+                        <Input
+                          placeholder="Qty"
+                          type="number"
+                          value={ing.quantity}
+                          onChange={(e) =>
+                            handleIngredientChange(
+                              idx,
+                              "quantity",
+                              e.target.value
+                            )
+                          }
+                          required
+                        />
+                        <Select
+                          value={ing.unit}
+                          onValueChange={(val) =>
+                            handleIngredientChange(idx, "unit", val)
+                          }
+                          required
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Unit" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {units.map((u) => (
+                              <SelectItem key={u._id} value={u._id}>
+                                {u.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Select
+                          value={ing.category}
+                          onValueChange={(val) =>
+                            handleIngredientChange(idx, "category", val)
+                          }
+                          required
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Category" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {categories.map((c) => (
+                              <SelectItem key={c._id} value={c._id}>
+                                {c.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeIngredientRow(idx)}
+                          disabled={ingredientInputs.length === 1}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={addIngredientRow}
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Ingredient
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsCreateRecipeOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit">Add Recipe</Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Recipe Dialog */}
+        <Dialog open={isEditRecipeOpen} onOpenChange={setIsEditRecipeOpen}>
+          <DialogContent className="max-w-2xl">
+            <form
+              action={handleEditRecipe}
+              onSubmit={(e) => {
+                e.preventDefault();
+                const form = e.currentTarget as HTMLFormElement;
+                handleEditRecipe(new FormData(form));
+              }}
+            >
+              <DialogHeader>
+                <DialogTitle>Edit Recipe</DialogTitle>
+                <DialogDescription>
+                  Update the recipe details below.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="title">Title</Label>
+                  <Input
+                    id="title"
+                    name="title"
+                    required
+                    defaultValue={editRecipe?.title}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea
+                    id="description"
+                    name="description"
+                    defaultValue={editRecipe?.description}
+                  />
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <Label htmlFor="prepTime">Prep Time (min)</Label>
+                    <Input
+                      id="prepTime"
+                      name="prepTime"
+                      type="number"
+                      required
+                      defaultValue={editRecipe?.prepTime}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="cookTime">Cook Time (min)</Label>
+                    <Input
+                      id="cookTime"
+                      name="cookTime"
+                      type="number"
+                      required
+                      defaultValue={editRecipe?.cookTime}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="servings">Servings</Label>
+                    <Input
+                      id="servings"
+                      name="servings"
+                      type="number"
+                      required
+                      defaultValue={editRecipe?.servings}
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="instructions">Instructions</Label>
+                  <Textarea
+                    id="instructions"
+                    name="instructions"
+                    required
+                    defaultValue={editRecipe?.instructions}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="category">Category</Label>
+                  <Select
+                    name="category"
+                    required
+                    defaultValue={editRecipe?.category}
+                    onValueChange={(val) => {
+                      if (editRecipe)
+                        setEditRecipe({ ...editRecipe, category: val });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map((cat) => (
+                        <SelectItem key={cat._id} value={cat._id}>
+                          {cat.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Ingredients</Label>
+                  <div className="space-y-2">
+                    {editIngredientInputs.map((ing, idx) => (
+                      <div key={idx} className="flex gap-2 items-center">
+                        <Input
+                          placeholder="Name"
+                          value={ing.name}
+                          onChange={(e) =>
+                            handleEditIngredientChange(
+                              idx,
+                              "name",
+                              e.target.value
+                            )
+                          }
+                          required
+                        />
+                        <Input
+                          placeholder="Qty"
+                          type="number"
+                          value={ing.quantity}
+                          onChange={(e) =>
+                            handleEditIngredientChange(
+                              idx,
+                              "quantity",
+                              e.target.value
+                            )
+                          }
+                          required
+                        />
+                        <Select
+                          value={ing.unit}
+                          onValueChange={(val) =>
+                            handleEditIngredientChange(idx, "unit", val)
+                          }
+                          required
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Unit" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {units.map((u) => (
+                              <SelectItem key={u._id} value={u._id}>
+                                {u.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Select
+                          value={ing.category}
+                          onValueChange={(val) =>
+                            handleEditIngredientChange(idx, "category", val)
+                          }
+                          required
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Category" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {categories.map((c) => (
+                              <SelectItem key={c._id} value={c._id}>
+                                {c.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeEditIngredientRow(idx)}
+                          disabled={editIngredientInputs.length === 1}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={addEditIngredientRow}
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Ingredient
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsEditRecipeOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit">Save Changes</Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Meal Plan Creation Dialog */}
         <Dialog
-          open={!!selectedMealSlot}
-          onOpenChange={() => setSelectedMealSlot(null)}
+          open={isCreateMealPlanOpen}
+          onOpenChange={setIsCreateMealPlanOpen}
         >
-          <DialogContent className="max-w-4xl">
+          <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>
-                Select Recipe for {selectedMealSlot?.type} on{" "}
-                {selectedMealSlot?.date &&
-                  new Date(selectedMealSlot.date).toLocaleDateString()}
-              </DialogTitle>
+              <DialogTitle>Create Meal Plan</DialogTitle>
               <DialogDescription>
-                Choose a recipe from your collection
+                Enter the plan title, date, type, and select recipes.
               </DialogDescription>
             </DialogHeader>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-96 overflow-y-auto">
-              {recipes.map((recipe) => (
-                <Card
-                  key={recipe.id}
-                  className="cursor-pointer hover:shadow-md transition-shadow"
-                  onClick={() => handleAssignMeal(recipe)}
+            <div className="space-y-4">
+              <div>
+                <Label>Plan Title</Label>
+                <Input
+                  value={planTitle}
+                  onChange={(e) => setPlanTitle(e.target.value)}
+                  required
+                />
+              </div>
+              <div>
+                <Label>Date</Label>
+                <Input
+                  type="date"
+                  value={planDate}
+                  onChange={(e) => setPlanDate(e.target.value)}
+                  required
+                />
+              </div>
+              <div>
+                <Label>Plan Type</Label>
+                <Select
+                  value={planType}
+                  onValueChange={(val) =>
+                    setPlanType(val as "DAILY" | "WEEKLY")
+                  }
                 >
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base">{recipe.name}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-sm">
-                        <Clock className="h-4 w-4" />
-                        <span>{recipe.prepTime + recipe.cookTime} min</span>
-                      </div>
-                      <Badge variant="outline" className="text-xs">
-                        {recipe.difficulty}
-                      </Badge>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select plan type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="DAILY">Daily</SelectItem>
+                    <SelectItem value="WEEKLY">Weekly</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Recipes</Label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                  {recipes.map((recipe) => (
+                    <Button
+                      key={recipe._id}
+                      variant={
+                        selectedRecipes.includes(recipe._id)
+                          ? "secondary"
+                          : "outline"
+                      }
+                      onClick={() => {
+                        setSelectedRecipes((prev) =>
+                          prev.includes(recipe._id)
+                            ? prev.filter((id) => id !== recipe._id)
+                            : [...prev, recipe._id]
+                        );
+                      }}
+                    >
+                      {recipe.title}
+                    </Button>
+                  ))}
+                </div>
+              </div>
             </div>
             <DialogFooter>
               <Button
                 variant="outline"
-                onClick={() => setSelectedMealSlot(null)}
+                onClick={() => setIsCreateMealPlanOpen(false)}
               >
                 Cancel
+              </Button>
+              <Button
+                onClick={handleCreateMealPlan}
+                disabled={
+                  !planTitle || !planDate || selectedRecipes.length === 0
+                }
+              >
+                Create Meal Plan
               </Button>
             </DialogFooter>
           </DialogContent>
