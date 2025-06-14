@@ -34,144 +34,193 @@ import { ChefHat, Clock, Users, Plus, Star, Heart } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/components/ui/use-toast";
 
+interface Category {
+  _id: string;
+  name: string;
+}
+interface Unit {
+  _id: string;
+  name: string;
+  abbreviation: string;
+}
+interface IngredientInput {
+  name: string;
+  quantity: string;
+  unit: string; // unit _id
+  category: string; // category _id
+}
 interface Recipe {
   id: string;
-  name: string;
+  title: string;
   description: string;
   prepTime: number;
   cookTime: number;
   servings: number;
-  difficulty: "Easy" | "Medium" | "Hard";
-  ingredients: string[];
-  instructions: string[];
-  isFavorite: boolean;
-  isPopular: boolean;
-  category: string;
+  instructions: string;
+  ingredients: IngredientInput[];
+  category: string; // category _id
 }
-
 interface MealPlan {
   id: string;
+  title: string;
   date: string;
-  breakfast?: Recipe;
-  lunch?: Recipe;
-  dinner?: Recipe;
-  snacks?: Recipe[];
+  type: "DAILY" | "WEEKLY";
+  recipes: string[]; // Array of recipe IDs
 }
-
-const mealTypes = ["breakfast", "lunch", "dinner", "snacks"];
-const difficulties = ["Easy", "Medium", "Hard"];
-const categories = ["Main Course", "Appetizer", "Dessert", "Snack", "Beverage"];
 
 export default function MealPlanning() {
   const [mealPlans, setMealPlans] = useState<MealPlan[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [units, setUnits] = useState<Unit[]>([]);
   const [selectedWeek, setSelectedWeek] = useState(new Date());
   const [isCreateRecipeOpen, setIsCreateRecipeOpen] = useState(false);
-  const [selectedMealSlot, setSelectedMealSlot] = useState<{
-    date: string;
-    type: string;
-  } | null>(null);
+  const [ingredientInputs, setIngredientInputs] = useState<IngredientInput[]>([
+    { name: "", quantity: "", unit: "", category: "" },
+  ]);
+  const [selectedMealDate, setSelectedMealDate] = useState<string | null>(null);
+  const [selectedRecipes, setSelectedRecipes] = useState<string[]>([]);
   const { token } = useAuth();
   const { toast } = useToast();
 
   useEffect(() => {
-    // Fetch recipes and meal plans from backend
-    const fetchData = async () => {
-      try {
-        // Recipes
-        const recipesRes = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"}/recipes`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
-        const recipesData = await recipesRes.json();
-        setRecipes(
-          Array.isArray(recipesData)
-            ? recipesData.map((r: any) => ({
-                id: r._id || r.id,
-                name: r.name,
-                description: r.description,
-                prepTime: r.prepTime,
-                cookTime: r.cookTime,
-                servings: r.servings,
-                difficulty: r.difficulty,
-                ingredients: r.ingredients,
-                instructions: r.instructions,
-                isFavorite: !!r.isFavorite,
-                isPopular: !!r.isPopular,
-                category: r.category,
-              }))
-            : []
-        );
+    fetchCategories();
+    fetchUnits();
+    fetchRecipes();
+    fetchMealPlans();
+    // eslint-disable-next-line
+  }, [token]);
 
-        // Meal plans
-        const plansRes = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"}/meal-plans`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
-        const plansData = await plansRes.json();
-        setMealPlans(
-          Array.isArray(plansData)
-            ? plansData.map((plan: any) => ({
-                id: plan._id || plan.id,
-                date: plan.date,
-                breakfast: plan.breakfast,
-                lunch: plan.lunch,
-                dinner: plan.dinner,
-                snacks: plan.snacks,
-              }))
-            : []
-        );
-      } catch (error) {
-        toast({
-          title: "Error",
-          description: "Failed to load recipes or meal plans.",
-          variant: "destructive",
-        });
-      }
-    };
-
-    if (token) fetchData();
-  }, [token, toast]);
-
-  const getWeekDates = (startDate: Date) => {
-    const dates = [];
-    const start = new Date(startDate);
-    start.setDate(start.getDate() - start.getDay()); // Start from Sunday
-
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(start);
-      date.setDate(start.getDate() + i);
-      dates.push(date);
+  const fetchCategories = async () => {
+    try {
+      const res = await fetch(
+        `${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+        }/food-categories`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const data = await res.json();
+      setCategories(Array.isArray(data) ? data : []);
+    } catch {
+      setCategories([]);
     }
-    return dates;
   };
 
+  const fetchUnits = async () => {
+    try {
+      const res = await fetch(
+        `${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+        }/units`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const data = await res.json();
+      setUnits(Array.isArray(data) ? data : []);
+    } catch {
+      setUnits([]);
+    }
+  };
+
+  const fetchRecipes = async () => {
+    try {
+      const res = await fetch(
+        `${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+        }/recipes`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const data = await res.json();
+      setRecipes(
+        Array.isArray(data)
+          ? data.map((r: any) => ({
+              id: r._id || r.id,
+              title: r.title,
+              description: r.description,
+              prepTime: r.prepTime,
+              cookTime: r.cookTime,
+              servings: r.servings,
+              instructions: r.instructions,
+              ingredients: r.ingredients,
+              category:
+                typeof r.category === "object" ? r.category._id : r.category,
+            }))
+          : []
+      );
+    } catch {
+      setRecipes([]);
+    }
+  };
+
+  const fetchMealPlans = async () => {
+    try {
+      const res = await fetch(
+        `${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+        }/meal-plans`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const data = await res.json();
+      setMealPlans(
+        Array.isArray(data)
+          ? data.map((plan: any) => ({
+              id: plan._id || plan.id,
+              title: plan.title,
+              date: plan.date,
+              type: plan.type,
+              recipes: plan.recipes.map((r: any) =>
+                typeof r === "object" ? r._id : r
+              ),
+            }))
+          : []
+      );
+    } catch {
+      setMealPlans([]);
+    }
+  };
+
+  // --- Ingredient Dynamic Form ---
+  const handleIngredientChange = (
+    idx: number,
+    field: keyof IngredientInput,
+    value: string
+  ) => {
+    setIngredientInputs((prev) =>
+      prev.map((ing, i) => (i === idx ? { ...ing, [field]: value } : ing))
+    );
+  };
+  const addIngredientRow = () => {
+    setIngredientInputs((prev) => [
+      ...prev,
+      { name: "", quantity: "", unit: "", category: "" },
+    ]);
+  };
+  const removeIngredientRow = (idx: number) => {
+    setIngredientInputs((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  // --- Create Recipe ---
   const handleCreateRecipe = async (formData: FormData) => {
     const newRecipe = {
-      name: formData.get("name") as string,
+      title: formData.get("title") as string,
       description: formData.get("description") as string,
-      prepTime: Number.parseInt(formData.get("prepTime") as string),
-      cookTime: Number.parseInt(formData.get("cookTime") as string),
-      servings: Number.parseInt(formData.get("servings") as string),
-      difficulty: formData.get("difficulty") as "Easy" | "Medium" | "Hard",
-      ingredients: (formData.get("ingredients") as string)
-        .split("\n")
-        .filter((i) => i.trim()),
-      instructions: (formData.get("instructions") as string)
-        .split("\n")
-        .filter((i) => i.trim()),
-      isFavorite: false,
-      isPopular: false,
+      prepTime: Number(formData.get("prepTime")),
+      cookTime: Number(formData.get("cookTime")),
+      servings: Number(formData.get("servings")),
+      instructions: (formData.get("instructions") as string).trim(),
+      ingredients: ingredientInputs.map((ing) => ({
+        name: ing.name,
+        quantity: Number(ing.quantity),
+        unit: ing.unit,
+        category: ing.category,
+      })),
       category: formData.get("category") as string,
     };
 
     try {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"}/recipes`,
+        `${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+        }/recipes`,
         {
           method: "POST",
           headers: {
@@ -191,6 +240,7 @@ export default function MealPlanning() {
         ...prev,
       ]);
       setIsCreateRecipeOpen(false);
+      setIngredientInputs([{ name: "", quantity: "", unit: "", category: "" }]);
       toast({ title: "Success", description: "Recipe created successfully!" });
     } catch (error) {
       toast({
@@ -201,74 +251,61 @@ export default function MealPlanning() {
     }
   };
 
-  const handleAssignMeal = async (recipe: Recipe) => {
-    if (!selectedMealSlot) return;
-
+  // --- Create Meal Plan ---
+  const handleCreateMealPlan = async () => {
+    if (!selectedMealDate || selectedRecipes.length === 0) return;
+    const newPlan = {
+      title: `Meal Plan for ${selectedMealDate}`,
+      date: selectedMealDate,
+      type: "DAILY",
+      recipes: selectedRecipes,
+    };
     try {
-      // Find if a meal plan exists for the date
-      const existingPlan = mealPlans.find(
-        (plan) => plan.date === selectedMealSlot.date
+      const res = await fetch(
+        `${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+        }/meal-plans`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(newPlan),
+        }
       );
-      let updatedPlan: MealPlan;
-      if (existingPlan) {
-        updatedPlan = {
-          ...existingPlan,
-          [selectedMealSlot.type]: recipe,
-        };
-        // Update backend
-        await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"}/meal-plans/${existingPlan.id}`,
-          {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify(updatedPlan),
-          }
-        );
-        setMealPlans((prev) =>
-          prev.map((plan) =>
-            plan.id === existingPlan.id ? updatedPlan : plan
-          )
-        );
-      } else {
-        // Create new meal plan for the date
-        const newPlan = {
-          date: selectedMealSlot.date,
-          [selectedMealSlot.type]: recipe,
-        };
-        const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"}/meal-plans`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify(newPlan),
-          }
-        );
-        const created = await res.json();
-        setMealPlans((prev) => [
-          ...prev,
-          { ...created, id: created._id || created.id },
-        ]);
-      }
-      setSelectedMealSlot(null);
-      toast({ title: "Success", description: "Meal assigned!" });
+      if (!res.ok) throw new Error("Failed to create meal plan");
+      const created = await res.json();
+      setMealPlans((prev) => [
+        ...prev,
+        { ...created, id: created._id || created.id },
+      ]);
+      setSelectedMealDate(null);
+      setSelectedRecipes([]);
+      toast({ title: "Success", description: "Meal plan created!" });
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to assign meal.",
+        description: "Failed to create meal plan.",
         variant: "destructive",
       });
     }
   };
 
+  // --- Week Dates ---
+  const getWeekDates = (startDate: Date) => {
+    const dates = [];
+    const start = new Date(startDate);
+    start.setDate(start.getDate() - start.getDay());
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(start);
+      date.setDate(start.getDate() + i);
+      dates.push(date);
+    }
+    return dates;
+  };
+
   const weekDates = getWeekDates(selectedWeek);
-  const favoriteRecipes = recipes.filter((recipe) => recipe.isFavorite);
-  const popularRecipes = recipes.filter((recipe) => recipe.isPopular);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 dark:from-slate-900 dark:to-slate-800">
@@ -305,10 +342,10 @@ export default function MealPlanning() {
                   <div className="grid gap-4 py-4 max-h-96 overflow-y-auto">
                     <div className="grid grid-cols-2 gap-4">
                       <div className="grid gap-2">
-                        <Label htmlFor="name">Recipe Name</Label>
+                        <Label htmlFor="title">Recipe Title</Label>
                         <Input
-                          id="name"
-                          name="name"
+                          id="title"
+                          name="title"
                           placeholder="e.g., Chicken Stir Fry"
                           required
                         />
@@ -321,8 +358,11 @@ export default function MealPlanning() {
                           </SelectTrigger>
                           <SelectContent>
                             {categories.map((category) => (
-                              <SelectItem key={category} value={category}>
-                                {category}
+                              <SelectItem
+                                key={category._id}
+                                value={category._id}
+                              >
+                                {category.name}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -370,40 +410,97 @@ export default function MealPlanning() {
                       </div>
                     </div>
                     <div className="grid gap-2">
-                      <Label htmlFor="difficulty">Difficulty</Label>
-                      <Select name="difficulty" required>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select difficulty" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {difficulties.map((difficulty) => (
-                            <SelectItem key={difficulty} value={difficulty}>
-                              {difficulty}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="ingredients">
-                        Ingredients (one per line)
-                      </Label>
-                      <Textarea
-                        id="ingredients"
-                        name="ingredients"
-                        placeholder="2 chicken breasts&#10;1 cup rice&#10;2 tbsp soy sauce"
-                        rows={4}
-                        required
-                      />
+                      <Label>Ingredients</Label>
+                      {ingredientInputs.map((ing, idx) => (
+                        <div key={idx} className="flex gap-2 mb-2">
+                          <Input
+                            placeholder="Name"
+                            value={ing.name}
+                            onChange={(e) =>
+                              handleIngredientChange(
+                                idx,
+                                "name",
+                                e.target.value
+                              )
+                            }
+                            required
+                          />
+                          <Input
+                            placeholder="Qty"
+                            type="number"
+                            value={ing.quantity}
+                            onChange={(e) =>
+                              handleIngredientChange(
+                                idx,
+                                "quantity",
+                                e.target.value
+                              )
+                            }
+                            required
+                          />
+                          <Select
+                            value={ing.unit}
+                            onValueChange={(val) =>
+                              handleIngredientChange(idx, "unit", val)
+                            }
+                            required
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Unit" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {units.map((unit) => (
+                                <SelectItem key={unit._id} value={unit._id}>
+                                  {unit.name} ({unit.abbreviation})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Select
+                            value={ing.category}
+                            onValueChange={(val) =>
+                              handleIngredientChange(idx, "category", val)
+                            }
+                            required
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Category" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {categories.map((cat) => (
+                                <SelectItem key={cat._id} value={cat._id}>
+                                  {cat.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() => removeIngredientRow(idx)}
+                            disabled={ingredientInputs.length === 1}
+                          >
+                            ×
+                          </Button>
+                        </div>
+                      ))}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={addIngredientRow}
+                        className="mt-2"
+                      >
+                        + Add Ingredient
+                      </Button>
                     </div>
                     <div className="grid gap-2">
                       <Label htmlFor="instructions">
-                        Instructions (one per line)
+                        Instructions (one step per line)
                       </Label>
                       <Textarea
                         id="instructions"
                         name="instructions"
-                        placeholder="Heat oil in pan&#10;Cook chicken until done&#10;Add vegetables and stir"
+                        placeholder="Step 1&#10;Step 2&#10;Step 3"
                         rows={4}
                         required
                       />
@@ -429,7 +526,6 @@ export default function MealPlanning() {
           <TabsList>
             <TabsTrigger value="weekly">Weekly Plan</TabsTrigger>
             <TabsTrigger value="recipes">Recipe Collection</TabsTrigger>
-            <TabsTrigger value="favorites">Favorites</TabsTrigger>
           </TabsList>
 
           <TabsContent value="weekly">
@@ -464,82 +560,57 @@ export default function MealPlanning() {
             <div className="grid grid-cols-1 lg:grid-cols-7 gap-4">
               {weekDates.map((date, index) => {
                 const dateStr = date.toISOString().split("T")[0];
-                const dayPlan = mealPlans.find((plan) => plan.date === dateStr);
-                const dayNames = [
-                  "Sun",
-                  "Mon",
-                  "Tue",
-                  "Wed",
-                  "Thu",
-                  "Fri",
-                  "Sat",
-                ];
-
+                const plansForDay = mealPlans.filter(
+                  (plan) => plan.date === dateStr
+                );
                 return (
                   <Card key={index} className="min-h-96">
                     <CardHeader className="pb-3">
                       <CardTitle className="text-center">
-                        {dayNames[index]}
+                        {
+                          ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][
+                            index
+                          ]
+                        }
                       </CardTitle>
                       <CardDescription className="text-center">
                         {date.toLocaleDateString()}
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      {mealTypes.slice(0, 3).map((mealType) => (
-                        <div key={mealType} className="border rounded-lg p-3">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium capitalize">
-                              {mealType}
-                            </span>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() =>
-                                setSelectedMealSlot({
-                                  date: dateStr,
-                                  type: mealType,
-                                })
-                              }
-                            >
-                              <Plus className="h-4 w-4" />
-                            </Button>
-                          </div>
-                          {dayPlan?.[mealType as keyof MealPlan] ? (
-                            <div className="text-sm">
-                              <p className="font-medium">
-                                {
-                                  (
-                                    dayPlan[
-                                      mealType as keyof MealPlan
-                                    ] as Recipe
-                                  )?.name
-                                }
-                              </p>
-                              <div className="flex items-center gap-2 mt-1 text-muted-foreground">
-                                <Clock className="h-3 w-3" />
-                                <span>
-                                  {(
-                                    dayPlan[
-                                      mealType as keyof MealPlan
-                                    ] as Recipe
-                                  )?.prepTime +
-                                    (
-                                      dayPlan[
-                                        mealType as keyof MealPlan
-                                      ] as Recipe
-                                    )?.cookTime}{" "}
-                                  min
-                                </span>
-                              </div>
-                            </div>
-                          ) : (
-                            <p className="text-sm text-muted-foreground">
-                              No meal planned
-                            </p>
-                          )}
-                        </div>
-                      ))}
+                      <div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setSelectedMealDate(dateStr);
+                            setSelectedRecipes([]);
+                          }}
+                        >
+                          <Plus className="h-4 w-4" /> Add Meal Plan
+                        </Button>
+                        {plansForDay.length > 0 && (
+                          <ul className="mt-2 space-y-2">
+                            {plansForDay.map((plan) => (
+                              <li key={plan.id}>
+                                <div className="font-medium">{plan.title}</div>
+                                <div className="flex flex-wrap gap-2 mt-1">
+                                  {plan.recipes.map((rid) => {
+                                    const recipe = recipes.find(
+                                      (r) => r.id === rid
+                                    );
+                                    return recipe ? (
+                                      <Badge key={rid} variant="secondary">
+                                        {recipe.title}
+                                      </Badge>
+                                    ) : null;
+                                  })}
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
                     </CardContent>
                   </Card>
                 );
@@ -556,15 +627,7 @@ export default function MealPlanning() {
                 >
                   <CardHeader>
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg">{recipe.name}</CardTitle>
-                      <div className="flex gap-1">
-                        {recipe.isFavorite && (
-                          <Heart className="h-4 w-4 text-red-500 fill-current" />
-                        )}
-                        {recipe.isPopular && (
-                          <Star className="h-4 w-4 text-yellow-500 fill-current" />
-                        )}
-                      </div>
+                      <CardTitle className="text-lg">{recipe.title}</CardTitle>
                     </div>
                     <CardDescription>{recipe.description}</CardDescription>
                   </CardHeader>
@@ -581,152 +644,104 @@ export default function MealPlanning() {
                         </div>
                       </div>
                       <div className="flex items-center justify-between">
-                        <Badge variant="outline">{recipe.difficulty}</Badge>
-                        <Badge variant="secondary">{recipe.category}</Badge>
+                        <Badge variant="outline">
+                          {categories.find((c) => c._id === recipe.category)
+                            ?.name || "Unknown"}
+                        </Badge>
                       </div>
-                      <Button
-                        className="w-full"
-                        variant="outline"
-                        onClick={() =>
-                          selectedMealSlot && handleAssignMeal(recipe)
-                        }
-                        disabled={!selectedMealSlot}
-                      >
-                        <ChefHat className="mr-2 h-4 w-4" />
-                        {selectedMealSlot ? "Assign to Meal" : "View Recipe"}
-                      </Button>
+                      <div>
+                        <strong>Ingredients:</strong>
+                        <ul className="list-disc ml-5">
+                          {recipe.ingredients.map((ing, idx) => (
+                            <li key={idx}>
+                              {ing.quantity}{" "}
+                              {units.find((u) => u._id === ing.unit)
+                                ?.abbreviation || "unit"}{" "}
+                              {ing.name} (
+                              {categories.find((c) => c._id === ing.category)
+                                ?.name || "category"}
+                              )
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div>
+                        <strong>Instructions:</strong>
+                        <ol className="list-decimal ml-5">
+                          {recipe.instructions
+                            .split("\n")
+                            .filter((line) => line.trim())
+                            .map((step, idx) => (
+                              <li key={idx}>{step}</li>
+                            ))}
+                        </ol>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
               ))}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="favorites">
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                  <Heart className="h-5 w-5 text-red-500" />
-                  Favorite Recipes
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {favoriteRecipes.map((recipe) => (
-                    <Card
-                      key={recipe.id}
-                      className="hover:shadow-lg transition-shadow"
-                    >
-                      <CardHeader>
-                        <CardTitle className="text-lg">{recipe.name}</CardTitle>
-                        <CardDescription>{recipe.description}</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between text-sm">
-                            <div className="flex items-center gap-2">
-                              <Clock className="h-4 w-4" />
-                              <span>
-                                {recipe.prepTime + recipe.cookTime} min
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Users className="h-4 w-4" />
-                              <span>{recipe.servings} servings</span>
-                            </div>
-                          </div>
-                          <Badge variant="outline">{recipe.difficulty}</Badge>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                  <Star className="h-5 w-5 text-yellow-500" />
-                  Popular Recipes
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {popularRecipes.map((recipe) => (
-                    <Card
-                      key={recipe.id}
-                      className="hover:shadow-lg transition-shadow"
-                    >
-                      <CardHeader>
-                        <CardTitle className="text-lg">{recipe.name}</CardTitle>
-                        <CardDescription>{recipe.description}</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between text-sm">
-                            <div className="flex items-center gap-2">
-                              <Clock className="h-4 w-4" />
-                              <span>
-                                {recipe.prepTime + recipe.cookTime} min
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Users className="h-4 w-4" />
-                              <span>{recipe.servings} servings</span>
-                            </div>
-                          </div>
-                          <Badge variant="outline">{recipe.difficulty}</Badge>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </div>
             </div>
           </TabsContent>
         </Tabs>
 
-        {/* Recipe Selection Dialog */}
+        {/* Meal Plan Creation Dialog */}
         <Dialog
-          open={!!selectedMealSlot}
-          onOpenChange={() => setSelectedMealSlot(null)}
+          open={!!selectedMealDate}
+          onOpenChange={() => {
+            setSelectedMealDate(null);
+            setSelectedRecipes([]);
+          }}
         >
-          <DialogContent className="max-w-4xl">
+          <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>
-                Select Recipe for {selectedMealSlot?.type} on{" "}
-                {selectedMealSlot?.date &&
-                  new Date(selectedMealSlot.date).toLocaleDateString()}
+                Create Meal Plan for{" "}
+                {selectedMealDate &&
+                  new Date(selectedMealDate).toLocaleDateString()}
               </DialogTitle>
-              <DialogDescription>
-                Choose a recipe from your collection
-              </DialogDescription>
+              <DialogDescription>Select recipes for this day</DialogDescription>
             </DialogHeader>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-96 overflow-y-auto">
-              {recipes.map((recipe) => (
-                <Card
-                  key={recipe.id}
-                  className="cursor-pointer hover:shadow-md transition-shadow"
-                  onClick={() => handleAssignMeal(recipe)}
-                >
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base">{recipe.name}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-sm">
-                        <Clock className="h-4 w-4" />
-                        <span>{recipe.prepTime + recipe.cookTime} min</span>
-                      </div>
-                      <Badge variant="outline" className="text-xs">
-                        {recipe.difficulty}
-                      </Badge>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+            <div className="space-y-4">
+              <div>
+                <Label>Recipes</Label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                  {recipes.map((recipe) => (
+                    <Button
+                      key={recipe.id}
+                      variant={
+                        selectedRecipes.includes(recipe.id)
+                          ? "secondary"
+                          : "outline"
+                      }
+                      onClick={() => {
+                        setSelectedRecipes((prev) =>
+                          prev.includes(recipe.id)
+                            ? prev.filter((id) => id !== recipe.id)
+                            : [...prev, recipe.id]
+                        );
+                      }}
+                    >
+                      {recipe.title}
+                    </Button>
+                  ))}
+                </div>
+              </div>
             </div>
             <DialogFooter>
               <Button
                 variant="outline"
-                onClick={() => setSelectedMealSlot(null)}
+                onClick={() => {
+                  setSelectedMealDate(null);
+                  setSelectedRecipes([]);
+                }}
               >
                 Cancel
+              </Button>
+              <Button
+                onClick={handleCreateMealPlan}
+                disabled={selectedRecipes.length === 0}
+              >
+                Create Meal Plan
               </Button>
             </DialogFooter>
           </DialogContent>

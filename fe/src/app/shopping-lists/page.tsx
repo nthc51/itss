@@ -31,15 +31,21 @@ import {
 import { Label } from "@/components/ui/label";
 import { Plus, Search, Share2, Users, ShoppingCart } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import { shoppingListsApi } from "@/lib/api-service";
+import { shoppingListsApi, foodItemsApi } from "@/lib/api-service"; // For fetching categories
 
 interface ShoppingItem {
   id: string;
   name: string;
   quantity: string;
-  category: string;
-  completed: boolean;
+  category: string; // Should be category _id
+  bought: boolean; // Use bought instead of completed
   addedBy: string;
+  // Optionally: unit: string;
+}
+
+interface Category {
+  _id: string;
+  name: string;
 }
 
 interface ShoppingList {
@@ -55,19 +61,6 @@ interface ShoppingList {
   totalItems: number;
 }
 
-const categories = [
-  "Vegetables",
-  "Fruits",
-  "Meat",
-  "Fish",
-  "Dairy",
-  "Grains",
-  "Spices",
-  "Beverages",
-  "Snacks",
-  "Other",
-];
-
 export default function ShoppingLists() {
   const [lists, setLists] = useState<ShoppingList[]>([]);
   const [selectedList, setSelectedList] = useState<ShoppingList | null>(null);
@@ -76,11 +69,13 @@ export default function ShoppingLists() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isAddItemDialogOpen, setIsAddItemDialogOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+  const [categories, setCategories] = useState<Category[]>([]);
   const { toast } = useToast();
 
   // Fix hydration issues
   useEffect(() => {
     setIsMounted(true);
+    fetchCategories();
   }, []);
 
   useEffect(() => {
@@ -88,6 +83,24 @@ export default function ShoppingLists() {
       fetchShoppingLists();
     }
   }, [isMounted]);
+
+  const fetchCategories = async () => {
+    try {
+      const res = await fetch(
+        `${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+        }/food-categories`,
+        {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        }
+      );
+      if (!res.ok) throw new Error("Failed to fetch categories");
+      const data = await res.json();
+      setCategories(Array.isArray(data) ? data : []);
+    } catch {
+      setCategories([]);
+    }
+  };
 
   const fetchShoppingLists = async () => {
     setIsLoading(true);
@@ -107,7 +120,7 @@ export default function ShoppingLists() {
                   name: item.name,
                   quantity: item.quantity,
                   category: item.category,
-                  completed: item.completed,
+                  bought: item.completed,
                   addedBy:
                     typeof item.addedBy === "object" && item.addedBy?.fullName
                       ? item.addedBy.fullName
@@ -186,8 +199,8 @@ export default function ShoppingLists() {
         id: crypto.randomUUID(),
         name: formData.get("itemName") as string,
         quantity: formData.get("quantity") as string,
-        category: formData.get("category") as string,
-        completed: false,
+        category: formData.get("category") as string, // category _id
+        bought: false, // Use bought instead of completed
         addedBy: "You",
       };
 
@@ -223,16 +236,16 @@ export default function ShoppingLists() {
     }
   };
 
-  // Toggle item complete by updating the whole list
-  const toggleItemComplete = async (
+  // Toggle item bought by updating the whole list
+  const toggleItemBought = async (
     listId: string,
     itemId: string,
-    completed: boolean
+    bought: boolean
   ) => {
     const list = lists.find((l) => l.id === listId);
     if (!list) return;
     const updatedItems = list.items.map((item) =>
-      item.id === itemId ? { ...item, completed: !completed } : item
+      item.id === itemId ? { ...item, bought: !bought } : item
     );
     const updatedList = { ...list, items: updatedItems };
     try {
@@ -243,7 +256,7 @@ export default function ShoppingLists() {
             ? {
                 ...l,
                 items: updatedItems,
-                completedItems: updatedItems.filter((i) => i.completed).length,
+                completedItems: updatedItems.filter((i) => i.bought).length,
               }
             : l
         )
@@ -427,18 +440,18 @@ export default function ShoppingLists() {
                               className="flex items-center gap-2"
                             >
                               <Checkbox
-                                checked={item.completed || false}
+                                checked={item.bought || false}
                                 onCheckedChange={() =>
-                                  toggleItemComplete(
+                                  toggleItemBought(
                                     list.id,
                                     item.id,
-                                    item.completed || false
+                                    item.bought || false
                                   )
                                 }
                               />
                               <span
                                 className={`text-sm ${
-                                  item.completed
+                                  item.bought
                                     ? "line-through text-muted-foreground"
                                     : ""
                                 }`}
@@ -568,8 +581,11 @@ export default function ShoppingLists() {
                               </SelectTrigger>
                               <SelectContent>
                                 {categories.map((category) => (
-                                  <SelectItem key={category} value={category}>
-                                    {category}
+                                  <SelectItem
+                                    key={category._id}
+                                    value={category._id}
+                                  >
+                                    {category.name}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
@@ -599,20 +615,20 @@ export default function ShoppingLists() {
                     >
                       <div className="flex items-center gap-3">
                         <Checkbox
-                          checked={item.completed || false}
+                          checked={item.bought || false}
                           onCheckedChange={() =>
                             selectedList &&
-                            toggleItemComplete(
+                            toggleItemBought(
                               selectedList.id,
                               item.id,
-                              item.completed || false
+                              item.bought || false
                             )
                           }
                         />
                         <div>
                           <p
                             className={`font-medium ${
-                              item.completed
+                              item.bought
                                 ? "line-through text-muted-foreground"
                                 : ""
                             }`}
@@ -626,8 +642,8 @@ export default function ShoppingLists() {
                           </p>
                         </div>
                       </div>
-                      <Badge variant={item.completed ? "default" : "secondary"}>
-                        {item.completed ? "Done" : "Pending"}
+                      <Badge variant={item.bought ? "default" : "secondary"}>
+                        {item.bought ? "Done" : "Pending"}
                       </Badge>
                     </div>
                   ))}

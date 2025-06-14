@@ -55,7 +55,7 @@ interface Category {
 interface FoodItem {
   id: string;
   name: string;
-  quantity: string;
+  quantity: number;
   unit: Unit | string;
   category: Category | string;
   expirationDate: string;
@@ -77,7 +77,7 @@ export default function FridgeManagement() {
   const [isLoading, setIsLoading] = useState(true);
   const [isMounted, setIsMounted] = useState(false);
   const { toast } = useToast();
-  const { token, user } = useAuth();
+  const { token } = useAuth();
 
   // --- Fetch units and categories for dropdowns ---
   useEffect(() => {
@@ -91,7 +91,9 @@ export default function FridgeManagement() {
   const fetchUnits = async () => {
     try {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"}/units`,
+        `${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+        }/units`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -112,7 +114,9 @@ export default function FridgeManagement() {
   const fetchCategories = async () => {
     try {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"}/food-categories`,
+        `${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+        }/food-categories`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -151,7 +155,10 @@ export default function FridgeManagement() {
   const formatFoodItem = (item: any): FoodItem => ({
     id: item._id || item.id,
     name: item.name || "",
-    quantity: String(item.quantity || ""),
+    quantity:
+      typeof item.quantity === "number"
+        ? item.quantity
+        : Number(item.quantity) || 0,
     unit: item.unit || "",
     category: item.category || "",
     expirationDate: item.expirationDate || item.expiry_date || "",
@@ -160,8 +167,9 @@ export default function FridgeManagement() {
       item.addedDate ||
       item.created_at ||
       new Date().toISOString().split("T")[0],
-    daysUntilExpiry:
-      calculateDaysUntilExpiry(item.expirationDate || item.expiry_date || ""),
+    daysUntilExpiry: calculateDaysUntilExpiry(
+      item.expirationDate || item.expiry_date || ""
+    ),
   });
 
   // --- Fetch food items ---
@@ -169,7 +177,9 @@ export default function FridgeManagement() {
     setIsLoading(true);
     try {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"}/pantry-items`,
+        `${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+        }/pantry-items`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -194,21 +204,22 @@ export default function FridgeManagement() {
     }
   };
 
-  // --- Add food item (with unit, category, ownedBy) ---
+  // --- Add food item (do NOT send ownedBy, send quantity as number) ---
   const handleAddFood = async (formData: FormData) => {
     try {
       const newItem = {
         name: formData.get("name") as string,
-        quantity: formData.get("quantity") as string,
+        quantity: Number(formData.get("quantity")),
         unit: formData.get("unit") as string,
         category: formData.get("category") as string,
         expirationDate: formData.get("expirationDate") as string,
         location: formData.get("location") as string,
-        ownedBy: user?.id || user?.id, // Use logged-in user
       };
 
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"}/pantry-items`,
+        `${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+        }/pantry-items`,
         {
           method: "POST",
           headers: {
@@ -243,7 +254,9 @@ export default function FridgeManagement() {
   const handleDeleteFood = async (id: string) => {
     try {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"}/pantry-items/${id}`,
+        `${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+        }/pantry-items/${id}`,
         {
           method: "DELETE",
           headers: {
@@ -289,14 +302,17 @@ export default function FridgeManagement() {
   // --- Filtering and sorting ---
   let filteredItems = foodItems.filter((item) => {
     const itemName = item?.name || "";
-    const itemCategory = extractStringValue(item?.category);
+    const itemCategoryId =
+      typeof item.category === "object" && item.category._id
+        ? item.category._id
+        : item.category;
     const itemLocation = item?.location || "";
 
     const matchesSearch = itemName
       .toLowerCase()
       .includes(searchTerm.toLowerCase());
     const matchesCategory =
-      filterCategory === "all" || itemCategory === filterCategory;
+      filterCategory === "all" || itemCategoryId === filterCategory;
     const matchesLocation =
       filterLocation === "all" || itemLocation === filterLocation;
     return matchesSearch && matchesCategory && matchesLocation;
@@ -372,6 +388,7 @@ export default function FridgeManagement() {
                       <Input
                         id="quantity"
                         name="quantity"
+                        type="number"
                         placeholder="e.g., 2"
                         required
                       />
@@ -481,8 +498,8 @@ export default function FridgeManagement() {
                   <p className="text-2xl font-bold">
                     {
                       new Set(
-                        foodItems.map(
-                          (item) => extractStringValue(item.category, "Other")
+                        foodItems.map((item) =>
+                          extractStringValue(item.category, "Other")
                         )
                       ).size
                     }
@@ -527,7 +544,7 @@ export default function FridgeManagement() {
                 <SelectContent>
                   <SelectItem value="all">All Categories</SelectItem>
                   {categories.map((category) => (
-                    <SelectItem key={category._id} value={category.name}>
+                    <SelectItem key={category._id} value={category._id}>
                       {category.name}
                     </SelectItem>
                   ))}
@@ -572,7 +589,9 @@ export default function FridgeManagement() {
             {filteredItems.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {filteredItems.map((item) => {
-                  const expiryStatus = getExpiryStatus(item.daysUntilExpiry || 0);
+                  const expiryStatus = getExpiryStatus(
+                    item.daysUntilExpiry || 0
+                  );
                   return (
                     <Card
                       key={item.id}
@@ -602,7 +621,9 @@ export default function FridgeManagement() {
                             <span>
                               Expires:{" "}
                               {item.expirationDate
-                                ? new Date(item.expirationDate).toLocaleDateString()
+                                ? new Date(
+                                    item.expirationDate
+                                  ).toLocaleDateString()
                                 : "No date"}
                             </span>
                           </div>

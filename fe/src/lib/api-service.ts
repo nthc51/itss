@@ -17,6 +17,11 @@ function getCurrentUserId(): string | null {
   }
 }
 
+function getToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("token");
+}
+
 // Generic API request with built‑in error handling
 async function apiRequest<T>(
   endpoint: string,
@@ -27,6 +32,10 @@ async function apiRequest<T>(
     "Content-Type": "application/json",
     ...(options.headers as Record<string, string>),
   };
+  const token = getToken();
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
   const config: RequestInit = { ...options, headers };
 
   try {
