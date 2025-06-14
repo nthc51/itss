@@ -9,6 +9,7 @@ router.use(authMiddleware.protect);
 
 // Routes cho các tài liệu ShoppingList
 router.post('/', shoppingListController.createShoppingList);
+router.post('/:id/items', shoppingListController.addItemToShoppingList); // <-- Dòng này đã được sửa
 router.get('/', shoppingListController.getShoppingLists);
 router.get('/:id', shoppingListController.getShoppingListById);
 router.put('/:id', shoppingListController.updateShoppingList);

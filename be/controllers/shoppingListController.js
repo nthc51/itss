@@ -1,46 +1,92 @@
 // controllers/shoppingListController.js
+const mongoose = require('mongoose');
 const { ShoppingList, User, FoodCategory, Unit } = require('../models/models'); // Import các model cần thiết
 
 // 1. Tạo danh sách mua sắm mới (CREATE)
 exports.createShoppingList = async (req, res) => {
     try {
-        const { name, items } = req.body;
+        const { name, startDate, endDate, items } = req.body;
 
-        // DEBUG LOG: Kiểm tra req.user và req.user.id TRONG SHOPPINGLIST CONTROLLER
-        console.log("DEBUG SHOPPINGLIST: req.user:", req.user);
-        console.log("DEBUG SHOPPINGLIST: req.user.id:", req.user ? req.user.id : "No user ID");
-
-        // Đảm bảo req.user được thiết lập bởi authMiddleware (đã được đảm bảo bởi protect middleware)
+        // Đảm bảo req.user.id tồn tại (được thêm bởi middleware xác thực)
         if (!req.user || !req.user.id) {
-            console.error("Lỗi ShoppingList: Người dùng không xác thực hoặc thiếu ID người dùng (Lẽ ra đã được xử lý bởi middleware).");
-            return res.status(401).json({ message: 'User not authenticated or user ID missing.' });
+            return res.status(401).json({ message: 'Người dùng chưa được xác thực.' });
         }
 
-        // Tạo một Shopping List mới
+        // Tạo đối tượng danh sách mua sắm mới
         const newShoppingList = new ShoppingList({
             name,
-            items,
-            ownedBy: req.user.id // Gán shopping list cho người dùng hiện tại
+            startDate: startDate || new Date(), // Sử dụng ngày hiện tại nếu không cung cấp
+            endDate,
+            // Đảm bảo items là một mảng, nếu không có thì mặc định là rỗng
+            items: items || [],
+            ownedBy: req.user.id // Gán người tạo từ token JWT đã xác thực
         });
 
-        // DEBUG LOG: Kiểm tra đối tượng ShoppingList trước khi lưu
-        console.log("DEBUG SHOPPINGLIST: newShoppingList before save:", newShoppingList);
-
         const savedShoppingList = await newShoppingList.save();
-
         res.status(201).json(savedShoppingList);
     } catch (error) {
-        // DEBUG LOG: Ghi lại TOÀN BỘ đối tượng lỗi cho ShoppingList
-        console.error("Error creating shopping list:", error);
-        // Cải thiện thông báo lỗi nếu là lỗi xác thực Mongoose
+        console.error('Lỗi khi tạo danh sách mua sắm:', error);
+        // Trả về lỗi xác thực chi tiết hơn nếu có
         if (error.name === 'ValidationError') {
-            const errors = {};
-            for (const field in error.errors) {
-                errors[field] = error.errors[field].message;
-            }
+            let errors = {};
+            Object.keys(error.errors).forEach((key) => {
+                errors[key] = error.errors[key].message;
+            });
             return res.status(400).json({ message: 'Lỗi xác thực dữ liệu', errors });
         }
-        res.status(500).json({ message: error.message || 'Lỗi server khi tạo danh sách mua sắm.' });
+        res.status(500).json({ message: 'Lỗi server nội bộ khi tạo danh sách mua sắm.' });
+    }
+};
+
+// Các hàm khác như getShoppingLists, getShoppingListById, updateShoppingList, deleteShoppingList
+// ...
+
+// Hàm thêm vật phẩm vào Shopping List
+exports.addItemToShoppingList = async (req, res) => { // <-- Đảm bảo hàm này được định nghĩa và export như thế này
+    try {
+        const { id } = req.params; // id của shopping list
+        const { name, category, quantity, unit, status } = req.body; // Thông tin vật phẩm mới
+
+        // Kiểm tra vật phẩm có đủ thông tin cần thiết không
+        if (!name || !category || !quantity || !unit) {
+            return res.status(400).json({ message: 'Vật phẩm mới cần có tên, danh mục, số lượng và đơn vị.' });
+        }
+
+        const shoppingList = await ShoppingList.findById(id);
+
+        if (!shoppingList) {
+            return res.status(404).json({ message: 'Danh sách mua sắm không tìm thấy.' });
+        }
+
+        // Kiểm tra quyền sở hữu trước khi sửa đổi
+        if (shoppingList.ownedBy.toString() !== req.user.id) {
+            return res.status(403).json({ message: 'Bạn không có quyền truy cập vào danh sách mua sắm này.' });
+        }
+
+        // Tạo ID mới cho sub-document
+        const newItem = {
+            _id: new mongoose.Types.ObjectId(), // Tạo ID mới cho vật phẩm con
+            name,
+            category,
+            quantity,
+            unit,
+            status: status || 'PENDING'
+        };
+
+        shoppingList.items.push(newItem);
+        await shoppingList.save();
+
+        res.status(200).json(shoppingList); // Trả về danh sách đã cập nhật
+    } catch (error) {
+        console.error('Lỗi khi thêm vật phẩm vào danh sách mua sắm:', error);
+        if (error.name === 'ValidationError') {
+            let errors = {};
+            Object.keys(error.errors).forEach((key) => {
+                errors[key] = error.errors[key].message;
+            });
+            return res.status(400).json({ message: 'Lỗi xác thực dữ liệu', errors });
+        }
+        res.status(500).json({ message: 'Lỗi server nội bộ khi thêm vật phẩm.' });
     }
 };
 
