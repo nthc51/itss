@@ -59,7 +59,7 @@ interface IngredientInput {
   category: string; // category _id
 }
 interface Recipe {
-  id: string;
+  _id: string;
   title: string;
   description: string;
   prepTime: number;
@@ -74,7 +74,7 @@ interface MealPlan {
   title: string;
   date: string;
   type: "DAILY" | "WEEKLY";
-  recipes: string[]; // Array of recipe IDs
+  recipes: { _id: string; title: string }[]; // Array of recipe objects
 }
 
 export default function MealPlanning() {
@@ -149,7 +149,7 @@ export default function MealPlanning() {
       setRecipes(
         Array.isArray(data)
           ? data.map((r: any) => ({
-              id: r._id || r.id,
+              _id: r._id,
               title: r.title,
               description: r.description,
               prepTime: r.prepTime,
@@ -183,9 +183,13 @@ export default function MealPlanning() {
               title: plan.title,
               date: plan.date,
               type: plan.type,
-              recipes: plan.recipes.map((r: any) =>
-                typeof r === "object" ? r._id : r
-              ),
+              recipes: Array.isArray(plan.recipes)
+                ? plan.recipes.map((r: any) =>
+                    typeof r === "object"
+                      ? { _id: r._id, title: r.title }
+                      : { _id: r, title: "" }
+                  )
+                : [],
             }))
           : []
       );
@@ -271,7 +275,7 @@ export default function MealPlanning() {
       setRecipes((prev) => [
         {
           ...created,
-          id: created._id || created.id,
+          _id: created._id,
         },
         ...prev,
       ]);
@@ -322,7 +326,7 @@ export default function MealPlanning() {
       const res = await fetch(
         `${
           process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
-        }/recipes/${editRecipe.id}`,
+        }/recipes/${editRecipe._id}`,
         {
           method: "PUT",
           headers: {
@@ -336,9 +340,7 @@ export default function MealPlanning() {
       const updated = await res.json();
       setRecipes((prev) =>
         prev.map((r) =>
-          r.id === updated._id || r.id === updated.id
-            ? { ...updated, id: updated._id || updated.id }
-            : r
+          r._id === updated._id ? { ...updated, _id: updated._id } : r
         )
       );
       setIsEditRecipeOpen(false);
@@ -366,7 +368,7 @@ export default function MealPlanning() {
         }
       );
       if (!res.ok) throw new Error("Failed to delete recipe");
-      setRecipes((prev) => prev.filter((r) => r.id !== id));
+      setRecipes((prev) => prev.filter((r) => r._id !== id));
       toast({ title: "Success", description: "Recipe deleted!" });
     } catch (error) {
       toast({
@@ -404,7 +406,17 @@ export default function MealPlanning() {
       const created = await res.json();
       setMealPlans((prev) => [
         ...prev,
-        { ...created, id: created._id || created.id },
+        {
+          ...created,
+          id: created._id || created.id,
+          recipes: Array.isArray(created.recipes)
+            ? created.recipes.map((r: any) =>
+                typeof r === "object"
+                  ? { _id: r._id, title: r.title }
+                  : { _id: r, title: "" }
+              )
+            : [],
+        },
       ]);
       setPlanTitle("");
       setPlanDate("");
@@ -471,14 +483,9 @@ export default function MealPlanning() {
                     <div>
                       <strong>Recipes:</strong>
                       <ul className="list-disc ml-5">
-                        {plan.recipes.map((rid) => {
-                          const recipe = recipes.find((r) => r.id === rid);
-                          return recipe ? (
-                            <li key={rid}>{recipe.title}</li>
-                          ) : (
-                            <li key={rid}>{rid}</li>
-                          );
-                        })}
+                        {plan.recipes.map((r) => (
+                          <li key={r._id}>{r.title}</li>
+                        ))}
                       </ul>
                     </div>
                   </CardContent>
@@ -491,7 +498,7 @@ export default function MealPlanning() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {recipes.map((recipe) => (
                 <Card
-                  key={recipe.id}
+                  key={recipe._id}
                   className="hover:shadow-lg transition-shadow"
                 >
                   <CardHeader>
@@ -512,7 +519,7 @@ export default function MealPlanning() {
                         <Button
                           variant="destructive"
                           size="icon"
-                          onClick={() => handleDeleteRecipe(recipe.id)}
+                          onClick={() => handleDeleteRecipe(recipe._id)}
                           aria-label="Delete"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -994,17 +1001,17 @@ export default function MealPlanning() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-48 overflow-y-auto">
                   {recipes.map((recipe) => (
                     <Button
-                      key={recipe.id}
+                      key={recipe._id}
                       variant={
-                        selectedRecipes.includes(recipe.id)
+                        selectedRecipes.includes(recipe._id)
                           ? "secondary"
                           : "outline"
                       }
                       onClick={() => {
                         setSelectedRecipes((prev) =>
-                          prev.includes(recipe.id)
-                            ? prev.filter((id) => id !== recipe.id)
-                            : [...prev, recipe.id]
+                          prev.includes(recipe._id)
+                            ? prev.filter((id) => id !== recipe._id)
+                            : [...prev, recipe._id]
                         );
                       }}
                     >
