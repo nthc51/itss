@@ -31,34 +31,33 @@ import {
 import { Label } from "@/components/ui/label";
 import { Plus, Search, Share2, Users, ShoppingCart } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import { shoppingListsApi, foodItemsApi } from "@/lib/api-service"; // For fetching categories
 
 interface ShoppingItem {
-  id: string;
+  _id: string;
   name: string;
-  quantity: string;
-  category: string; // Should be category _id
-  bought: boolean; // Use bought instead of completed
-  addedBy: string;
-  // Optionally: unit: string;
+  quantity: number;
+  unit: string; // unit ObjectId
+  category: string; // category ObjectId
+  status: string; // "PENDING" | "BOUGHT"
 }
 
 interface Category {
   _id: string;
   name: string;
 }
+interface Unit {
+  _id: string;
+  name: string;
+  abbreviation: string;
+}
 
 interface ShoppingList {
-  id: string;
+  _id: string;
   name: string;
-  title?: string;
-  type: "daily" | "weekly";
-  date: string;
+  startDate: string;
+  endDate?: string;
   items: ShoppingItem[];
-  sharedWith: string[];
-  createdBy: string;
-  completedItems: number;
-  totalItems: number;
+  ownedBy: any;
 }
 
 export default function ShoppingLists() {
@@ -68,21 +67,16 @@ export default function ShoppingLists() {
   const [isLoading, setIsLoading] = useState(true);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isAddItemDialogOpen, setIsAddItemDialogOpen] = useState(false);
-  const [isMounted, setIsMounted] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [units, setUnits] = useState<Unit[]>([]);
   const { toast } = useToast();
 
-  // Fix hydration issues
   useEffect(() => {
-    setIsMounted(true);
     fetchCategories();
+    fetchUnits();
+    fetchShoppingLists();
+    // eslint-disable-next-line
   }, []);
-
-  useEffect(() => {
-    if (isMounted) {
-      fetchShoppingLists();
-    }
-  }, [isMounted]);
 
   const fetchCategories = async () => {
     try {
@@ -102,47 +96,39 @@ export default function ShoppingLists() {
     }
   };
 
+  const fetchUnits = async () => {
+    try {
+      const res = await fetch(
+        `${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+        }/units`,
+        {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        }
+      );
+      if (!res.ok) throw new Error("Failed to fetch units");
+      const data = await res.json();
+      setUnits(Array.isArray(data) ? data : []);
+    } catch {
+      setUnits([]);
+    }
+  };
+
   const fetchShoppingLists = async () => {
     setIsLoading(true);
     try {
-      const data = await shoppingListsApi.getAll();
-      // Ensure data is properly formatted
-      const formattedData = Array.isArray(data)
-        ? (data as any[]).map((raw) => ({
-            id: raw._id || raw.id,
-            name: raw.title || raw.name,
-            title: raw.title,
-            type: raw.type,
-            date: raw.startDate || raw.date,
-            items: Array.isArray(raw.items)
-              ? raw.items.map((item: any) => ({
-                  id: item._id || item.id,
-                  name: item.name,
-                  quantity: item.quantity,
-                  category: item.category,
-                  bought: item.completed,
-                  addedBy:
-                    typeof item.addedBy === "object" && item.addedBy?.fullName
-                      ? item.addedBy.fullName
-                      : item.addedBy || "Unknown",
-                }))
-              : [],
-            sharedWith: Array.isArray(raw.sharedWithGroup ?? raw.sharedWith)
-              ? raw.sharedWithGroup ?? raw.sharedWith
-              : [],
-            createdBy:
-              typeof raw.createdBy === "object" && raw.createdBy?.fullName
-                ? raw.createdBy.fullName
-                : raw.createdBy || "Unknown",
-            completedItems: raw.completedItems || 0,
-            totalItems:
-              raw.totalItems ||
-              (Array.isArray(raw.items) ? raw.items.length : 0),
-          }))
-        : [];
-      setLists(formattedData);
+      const res = await fetch(
+        `${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+        }/shopping-lists`,
+        {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        }
+      );
+      if (!res.ok) throw new Error("Failed to fetch shopping lists");
+      const data = await res.json();
+      setLists(Array.isArray(data) ? data : []);
     } catch (error) {
-      console.error("Failed to fetch shopping lists:", error);
       toast({
         title: "Error",
         description: "Failed to load shopping lists. Please try again.",
@@ -157,31 +143,34 @@ export default function ShoppingLists() {
   const handleCreateList = async (formData: FormData) => {
     try {
       const newList = {
-        title: formData.get("name") as string,
-        type: formData.get("type") as "daily" | "weekly",
-        startDate: formData.get("date") as string,
-        endDate: formData.get("date") as string,
+        name: formData.get("name") as string,
+        startDate: formData.get("startDate") as string,
+        endDate: (formData.get("endDate") as string) || undefined,
+        items: [],
       };
 
-      const createdList = await shoppingListsApi.create(newList);
-      const formattedList = {
-        ...createdList,
-        name: createdList.title,
-        items: createdList.items || [],
-        sharedWith: createdList.sharedWithGroup || [],
-        createdBy: createdList.createdBy || "You",
-        completedItems: 0,
-        totalItems: 0,
-      };
-
-      setLists((prev) => [formattedList, ...prev]);
+      const res = await fetch(
+        `${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+        }/shopping-lists`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+          body: JSON.stringify(newList),
+        }
+      );
+      if (!res.ok) throw new Error("Failed to create shopping list");
+      const created = await res.json();
+      setLists((prev) => [created, ...prev]);
       setIsCreateDialogOpen(false);
       toast({
         title: "Success",
         description: "Shopping list created successfully!",
       });
     } catch (error) {
-      console.error("Failed to create shopping list:", error);
       toast({
         title: "Error",
         description: "Failed to create shopping list. Please try again.",
@@ -190,44 +179,43 @@ export default function ShoppingLists() {
     }
   };
 
-  // Add item by updating the whole list
+  // Add item using the new endpoint
   const handleAddItem = async (formData: FormData) => {
     if (!selectedList) return;
-
     try {
-      const newItem: ShoppingItem = {
-        id: crypto.randomUUID(),
+      const newItem = {
         name: formData.get("itemName") as string,
-        quantity: formData.get("quantity") as string,
-        category: formData.get("category") as string, // category _id
-        bought: false, // Use bought instead of completed
-        addedBy: "You",
+        quantity: Number(formData.get("quantity")),
+        unit: formData.get("unit") as string,
+        category: formData.get("category") as string,
+        status: "PENDING",
       };
 
-      const updatedItems = [...selectedList.items, newItem];
-      const updatedList = { ...selectedList, items: updatedItems };
-
-      await shoppingListsApi.update(selectedList.id, updatedList);
-
-      setLists((prev) =>
-        prev.map((list) =>
-          list.id === selectedList.id
-            ? {
-                ...list,
-                items: updatedItems,
-                totalItems: updatedItems.length,
-              }
-            : list
-        )
+      const res = await fetch(
+        `${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+        }/shopping-lists/${selectedList._id}/items`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+          body: JSON.stringify(newItem),
+        }
       );
-
+      if (!res.ok) throw new Error("Failed to add item");
+      const updatedList = await res.json();
+      setLists((prev) =>
+        prev.map((list) => (list._id === updatedList._id ? updatedList : list))
+      );
+      setSelectedList(updatedList);
       setIsAddItemDialogOpen(false);
       toast({
         title: "Success",
         description: "Item added successfully!",
       });
     } catch (error) {
-      console.error("Failed to add item:", error);
       toast({
         title: "Error",
         description: "Failed to add item. Please try again.",
@@ -236,31 +224,32 @@ export default function ShoppingLists() {
     }
   };
 
-  // Toggle item bought by updating the whole list
+  // Toggle item bought using the update-item endpoint
   const toggleItemBought = async (
     listId: string,
     itemId: string,
     bought: boolean
   ) => {
-    const list = lists.find((l) => l.id === listId);
-    if (!list) return;
-    const updatedItems = list.items.map((item) =>
-      item.id === itemId ? { ...item, bought: !bought } : item
-    );
-    const updatedList = { ...list, items: updatedItems };
     try {
-      await shoppingListsApi.update(listId, updatedList);
-      setLists((prev) =>
-        prev.map((l) =>
-          l.id === listId
-            ? {
-                ...l,
-                items: updatedItems,
-                completedItems: updatedItems.filter((i) => i.bought).length,
-              }
-            : l
-        )
+      const res = await fetch(
+        `${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+        }/shopping-lists/${listId}/update-item/${itemId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+          body: JSON.stringify({ status: bought ? "PENDING" : "BOUGHT" }),
+        }
       );
+      if (!res.ok) throw new Error("Failed to update item");
+      const updatedList = await res.json();
+      setLists((prev) =>
+        prev.map((list) => (list._id === updatedList._id ? updatedList : list))
+      );
+      setSelectedList(updatedList);
     } catch (error) {
       toast({
         title: "Error",
@@ -271,13 +260,9 @@ export default function ShoppingLists() {
   };
 
   const filteredLists = lists.filter((list) => {
-    const text = (list.name || list.title || "").toLowerCase();
+    const text = (list.name || "").toLowerCase();
     return text.includes(searchTerm.toLowerCase());
   });
-
-  if (!isMounted) {
-    return null;
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 dark:from-slate-900 dark:to-slate-800">
@@ -322,20 +307,17 @@ export default function ShoppingLists() {
                       />
                     </div>
                     <div className="grid gap-2">
-                      <Label htmlFor="type">List Type</Label>
-                      <Select name="type" required>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="daily">Daily</SelectItem>
-                          <SelectItem value="weekly">Weekly</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <Label htmlFor="startDate">Start Date</Label>
+                      <Input
+                        id="startDate"
+                        name="startDate"
+                        type="date"
+                        required
+                      />
                     </div>
                     <div className="grid gap-2">
-                      <Label htmlFor="date">Date</Label>
-                      <Input id="date" name="date" type="date" required />
+                      <Label htmlFor="endDate">End Date</Label>
+                      <Input id="endDate" name="endDate" type="date" />
                     </div>
                   </div>
                   <DialogFooter>
@@ -383,75 +365,46 @@ export default function ShoppingLists() {
               <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
                 {filteredLists.map((list) => (
                   <Card
-                    key={list.id}
+                    key={list._id}
                     className="cursor-pointer hover:shadow-lg transition-shadow"
                   >
                     <CardHeader>
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-lg">
-                          {list.name || list.title || "Untitled List"}
+                          {list.name || "Untitled List"}
                         </CardTitle>
-                        <Badge
-                          variant={
-                            list.type === "weekly" ? "default" : "secondary"
-                          }
-                        >
-                          {list.type || "daily"}
+                        <Badge variant="default">
+                          {list.startDate
+                            ? new Date(list.startDate).toLocaleDateString()
+                            : "No date"}
                         </Badge>
                       </div>
                       <CardDescription>
-                        Created by {list.createdBy || "Unknown"} •{" "}
-                        {list.date
-                          ? new Date(list.date).toLocaleDateString()
-                          : "No date"}
+                        Owner: {list.ownedBy?.fullName || "Unknown"}
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-4">
-                        {/* Progress */}
-                        <div>
-                          <div className="flex justify-between text-sm mb-2">
-                            <span>Progress</span>
-                            <span>
-                              {list.completedItems || 0}/{list.totalItems || 0}
-                            </span>
-                          </div>
-                          <div className="w-full bg-gray-200 rounded-full h-2">
-                            <div
-                              className="bg-green-600 h-2 rounded-full"
-                              style={{
-                                width: `${
-                                  (list.totalItems || 0) > 0
-                                    ? ((list.completedItems || 0) /
-                                        (list.totalItems || 1)) *
-                                      100
-                                    : 0
-                                }%`,
-                              }}
-                            ></div>
-                          </div>
-                        </div>
-
                         {/* Items Preview */}
                         <div className="space-y-2">
                           {(list.items || []).slice(0, 3).map((item) => (
                             <div
-                              key={item.id}
+                              key={item._id}
                               className="flex items-center gap-2"
                             >
                               <Checkbox
-                                checked={item.bought || false}
+                                checked={item.status === "BOUGHT"}
                                 onCheckedChange={() =>
                                   toggleItemBought(
-                                    list.id,
-                                    item.id,
-                                    item.bought || false
+                                    list._id,
+                                    item._id,
+                                    item.status === "BOUGHT"
                                   )
                                 }
                               />
                               <span
                                 className={`text-sm ${
-                                  item.bought
+                                  item.status === "BOUGHT"
                                     ? "line-through text-muted-foreground"
                                     : ""
                                 }`}
@@ -467,17 +420,6 @@ export default function ShoppingLists() {
                             </p>
                           )}
                         </div>
-
-                        {/* Shared With */}
-                        {(list.sharedWith || []).length > 0 && (
-                          <div className="flex items-center gap-2">
-                            <Users className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm text-muted-foreground">
-                              Shared with {(list.sharedWith || []).join(", ")}
-                            </span>
-                          </div>
-                        )}
-
                         {/* Actions */}
                         <div className="flex gap-2 pt-2">
                           <Button
@@ -527,9 +469,8 @@ export default function ShoppingLists() {
             <DialogHeader>
               <DialogTitle>{selectedList?.name || "Shopping List"}</DialogTitle>
               <DialogDescription>
-                {selectedList?.type || "daily"} list •{" "}
-                {selectedList?.date
-                  ? new Date(selectedList.date).toLocaleDateString()
+                {selectedList?.startDate
+                  ? new Date(selectedList.startDate).toLocaleDateString()
                   : "No date"}
               </DialogDescription>
             </DialogHeader>
@@ -569,9 +510,25 @@ export default function ShoppingLists() {
                             <Input
                               id="quantity"
                               name="quantity"
-                              placeholder="e.g., 2 kg"
+                              type="number"
+                              placeholder="e.g., 2"
                               required
                             />
+                          </div>
+                          <div className="grid gap-2">
+                            <Label htmlFor="unit">Unit</Label>
+                            <Select name="unit" required>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select unit" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {units.map((unit) => (
+                                  <SelectItem key={unit._id} value={unit._id}>
+                                    {unit.name} ({unit.abbreviation})
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </div>
                           <div className="grid gap-2">
                             <Label htmlFor="category">Category</Label>
@@ -610,25 +567,25 @@ export default function ShoppingLists() {
                 <div className="space-y-2 max-h-60 overflow-y-auto">
                   {(selectedList.items || []).map((item) => (
                     <div
-                      key={item.id}
+                      key={item._id}
                       className="flex items-center justify-between p-3 border rounded-lg"
                     >
                       <div className="flex items-center gap-3">
                         <Checkbox
-                          checked={item.bought || false}
+                          checked={item.status === "BOUGHT"}
                           onCheckedChange={() =>
                             selectedList &&
                             toggleItemBought(
-                              selectedList.id,
-                              item.id,
-                              item.bought || false
+                              selectedList._id,
+                              item._id,
+                              item.status === "BOUGHT"
                             )
                           }
                         />
                         <div>
                           <p
                             className={`font-medium ${
-                              item.bought
+                              item.status === "BOUGHT"
                                 ? "line-through text-muted-foreground"
                                 : ""
                             }`}
@@ -637,13 +594,20 @@ export default function ShoppingLists() {
                           </p>
                           <p className="text-sm text-muted-foreground">
                             {item.quantity || "No quantity"} •{" "}
-                            {item.category || "No category"} • Added by{" "}
-                            {item.addedBy || "Unknown"}
+                            {categories.find((cat) => cat._id === item.category)
+                              ?.name || "No category"}{" "}
+                            •{" "}
+                            {units.find((u) => u._id === item.unit)?.name ||
+                              "No unit"}
                           </p>
                         </div>
                       </div>
-                      <Badge variant={item.bought ? "default" : "secondary"}>
-                        {item.bought ? "Done" : "Pending"}
+                      <Badge
+                        variant={
+                          item.status === "BOUGHT" ? "default" : "secondary"
+                        }
+                      >
+                        {item.status === "BOUGHT" ? "Done" : "Pending"}
                       </Badge>
                     </div>
                   ))}
