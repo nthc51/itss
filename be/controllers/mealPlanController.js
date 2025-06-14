@@ -192,6 +192,8 @@ exports.deleteMealPlan = async (req, res) => {
 
 // 6. Gợi ý bữa ăn dựa trên nguyên liệu trong tủ lạnh - KHÔNG ĐỔI
 exports.getMealPlanSuggestions = async (req, res) => {
+    console.log("Đang vào hàm getMealPlanSuggestions...");
+    console.log("req.params:", req.params);
     try {
         const userId = req.user.id;
 
