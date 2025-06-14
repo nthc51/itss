@@ -99,7 +99,7 @@ const mealPlanRoutes = require("./routes/mealPlanRoutes");
 const authRoutes = require("./routes/authRoutes");
 const foodCategoryRoutes = require("./routes/foodCategoryRoutes"); // New import
 const unitRoutes = require("./routes/unitRoutes");                 // New import
-const categoryRoutes = require("./routes/caRoutes");  
+//const categoryRoutes = require("./routes/caRoutes");
 
 // Mount routers under specific API paths
 // These paths define the base URL for each set of routes

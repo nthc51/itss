@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const foodCategoryController = require('../controllers/foodCategoryController');
-const authMiddleware = require('../middleware/authMiddleware'); // Áp dụng bảo vệ
+const authMiddleware = require('../middleware/authMiddleware');
 
 router.use(authMiddleware.protect);
 

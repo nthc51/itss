@@ -4,29 +4,45 @@ const { MealPlan, User, Recipe, PantryItem, FoodCategory, Unit } = require('../m
 // 1. Tạo kế hoạch bữa ăn mới (CREATE)
 exports.createMealPlan = async (req, res) => {
     try {
-        const { date, type, recipes, createdBy } = req.body;
+        const { name, startDate, endDate, planType, meals } = req.body;
 
-        // Trong một ứng dụng thực tế với JWT, createdBy nên được lấy từ req.user.id sau khi xác thực
-        // const createdByUserId = req.user.id;
-        // Kiểm tra xem người tạo (createdBy) có tồn tại không
-        const existingUser = await User.findById(createdBy); // Tạm thời dùng createdBy từ body
-        if (!existingUser) {
-            return res.status(400).json({ message: 'User not found.' });
+        // DEBUG LOG: Kiểm tra req.user và req.user.id TRONG MEALPLAN CONTROLLER
+        console.log("DEBUG MEALPLAN: req.user:", req.user);
+        console.log("DEBUG MEALPLAN: req.user.id:", req.user ? req.user.id : "No user ID");
+
+        // Kiểm tra xem req.user có tồn tại không (được cung cấp bởi authMiddleware.protect)
+        if (!req.user || !req.user.id) {
+            console.error("Lỗi MealPlan: Người dùng không xác thực hoặc thiếu ID người dùng.");
+            return res.status(401).json({ message: 'User not authenticated or user ID missing.' });
         }
 
-        // Kiểm tra các recipe ID có hợp lệ không
-        if (recipes && recipes.length > 0) {
-            const existingRecipes = await Recipe.find({ _id: { $in: recipes } });
-            if (existingRecipes.length !== recipes.length) {
-                return res.status(400).json({ message: 'One or more recipe IDs are invalid.' });
-            }
-        }
+        // Tạo một Meal Plan mới
+        const newMealPlan = new MealPlan({
+            name,
+            startDate,
+            endDate,
+            planType,
+            meals,
+            ownedBy: req.user.id // Gán meal plan cho người dùng hiện tại
+        });
 
-        const newMealPlan = new MealPlan({ date, type, recipes, createdBy });
+        // DEBUG LOG: Kiểm tra đối tượng MealPlan trước khi lưu
+        console.log("DEBUG MEALPLAN: newMealPlan before save:", newMealPlan);
+
         const savedMealPlan = await newMealPlan.save();
+
         res.status(201).json(savedMealPlan);
     } catch (error) {
-        console.error('Error creating meal plan:', error);
+        // DEBUG LOG: Ghi lại TOÀN BỘ đối tượng lỗi cho MealPlan
+        console.error("Error creating meal plan:", error);
+        // Cải thiện thông báo lỗi nếu là lỗi xác thực Mongoose
+        if (error.name === 'ValidationError') {
+            const errors = {};
+            for (const field in error.errors) {
+                errors[field] = error.errors[field].message;
+            }
+            return res.status(400).json({ message: 'Lỗi xác thực dữ liệu', errors });
+        }
         res.status(500).json({ message: error.message || 'Lỗi server khi tạo kế hoạch bữa ăn.' });
     }
 };
@@ -34,16 +50,17 @@ exports.createMealPlan = async (req, res) => {
 // 2. Lấy tất cả kế hoạch bữa ăn (READ ALL)
 exports.getMealPlans = async (req, res) => {
     try {
-        // Lấy userId từ query hoặc từ thông tin người dùng đã xác thực (req.user.id)
-        const userId = req.user ? req.user.id : req.query.userId;
-        let query = {};
-        if (userId) {
-            query.createdBy = userId;
-        }
+        // Lấy userId từ thông tin người dùng đã xác thực (req.user.id)
+        // Đây là cách tốt nhất, không cần req.query.userId nếu middleware đã bảo vệ route
+        const userId = req.user.id;
 
-        const mealPlans = await MealPlan.find(query)
-            .populate('createdBy', 'username fullName') // Populate thông tin người tạo
-            .populate('recipes', 'title'); // Populate thông tin các công thức (chỉ lấy title)
+        // Lọc các meal plan thuộc sở hữu của người dùng hiện tại
+        const mealPlans = await MealPlan.find({ ownedBy: userId }) // <-- THAY ĐỔI Ở ĐÂY: Lọc theo ownedBy
+            .populate('ownedBy', 'username fullName') // <-- THAY ĐỔI Ở ĐÂY: Populate thông tin người tạo từ ownedBy
+            .populate('meals.recipe', 'title'); // Populate thông tin các công thức (chỉ lấy title)
+
+        // Chú ý: nếu bạn có nhiều trường trong "meals", ví dụ meals: [{ day: String, type: String, recipe: ObjectId }]
+        // thì cần populate 'meals.recipe' chứ không phải 'recipes'. Tôi giả định 'meals' là một mảng object với trường 'recipe'.
 
         res.status(200).json(mealPlans);
     } catch (error) {
@@ -56,12 +73,18 @@ exports.getMealPlans = async (req, res) => {
 exports.getMealPlanById = async (req, res) => {
     try {
         const mealPlan = await MealPlan.findById(req.params.id)
-            .populate('createdBy', 'username fullName')
-            .populate('recipes', 'title ingredients'); // Populate đầy đủ hơn nếu cần chi tiết công thức
+            .populate('ownedBy', 'username fullName') // <-- THAY ĐỔI Ở ĐÂY: Populate ownedBy
+            .populate('meals.recipe', 'title ingredients'); // Populate đầy đủ hơn nếu cần chi tiết công thức
 
         if (!mealPlan) {
             return res.status(404).json({ message: 'Meal plan not found' });
         }
+
+        // KIỂM TRA QUYỀN SỞ HỮU: Chỉ chủ sở hữu mới có thể xem chi tiết
+        if (mealPlan.ownedBy.toString() !== req.user.id) {
+            return res.status(403).json({ message: 'Không có quyền truy cập kế hoạch bữa ăn này.' });
+        }
+
         res.status(200).json(mealPlan);
     } catch (error) {
         console.error('Error fetching meal plan by ID:', error);
@@ -73,16 +96,27 @@ exports.getMealPlanById = async (req, res) => {
 // 4. Cập nhật kế hoạch bữa ăn (UPDATE)
 exports.updateMealPlan = async (req, res) => {
     try {
+        // Tìm kế hoạch bữa ăn trước để kiểm tra quyền sở hữu
+        const mealPlanToUpdate = await MealPlan.findById(req.params.id);
+        if (!mealPlanToUpdate) {
+            return res.status(404).json({ message: 'Meal plan not found' });
+        }
+
+        // KIỂM TRA QUYỀN SỞ HỮU: Chỉ chủ sở hữu mới có thể cập nhật
+        if (mealPlanToUpdate.ownedBy.toString() !== req.user.id) {
+            return res.status(403).json({ message: 'Không có quyền cập nhật kế hoạch bữa ăn này.' });
+        }
+
         const updatedMealPlan = await MealPlan.findByIdAndUpdate(
             req.params.id,
             req.body,
-            { new: true, runValidators: true } // `new: true` trả về tài liệu đã cập nhật, `runValidators` chạy lại validation schema
+            { new: true, runValidators: true }
         )
-            .populate('createdBy', 'username fullName')
-            .populate('recipes', 'title'); // Populate thông tin các công thức (chỉ lấy title)
+            .populate('ownedBy', 'username fullName') // <-- THAY ĐỔI Ở ĐÂY: Populate ownedBy
+            .populate('meals.recipe', 'title');
 
         if (!updatedMealPlan) {
-            return res.status(404).json({ message: 'Meal plan not found' });
+            return res.status(404).json({ message: 'Meal plan not found after update attempt.' });
         }
         res.status(200).json(updatedMealPlan);
     } catch (error) {
@@ -94,9 +128,20 @@ exports.updateMealPlan = async (req, res) => {
 // 5. Xóa kế hoạch bữa ăn (DELETE)
 exports.deleteMealPlan = async (req, res) => {
     try {
-        const deletedMealPlan = await MealPlan.findByIdAndDelete(req.params.id);
-        if (!deletedMealPlan) {
+        // Tìm kế hoạch bữa ăn trước để kiểm tra quyền sở hữu
+        const mealPlanToDelete = await MealPlan.findById(req.params.id);
+        if (!mealPlanToDelete) {
             return res.status(404).json({ message: 'Meal plan not found' });
+        }
+
+        // KIỂM TRA QUYỀN SỞ HỮU: Chỉ chủ sở hữu mới có thể xóa
+        if (mealPlanToDelete.ownedBy.toString() !== req.user.id) {
+            return res.status(403).json({ message: 'Không có quyền xóa kế hoạch bữa ăn này.' });
+        }
+
+        const deletedMealPlan = await MealPlan.findByIdAndDelete(req.params.id);
+        if (!deletedMealPlan) { // Kiểm tra lại, mặc dù đã kiểm tra ở trên
+            return res.status(404).json({ message: 'Meal plan not found after delete attempt.' });
         }
         res.status(200).json({ message: 'Meal plan deleted successfully' });
     } catch (error) {
@@ -109,7 +154,7 @@ exports.deleteMealPlan = async (req, res) => {
 exports.getMealPlanSuggestions = async (req, res) => {
     try {
         // userId có thể đến từ req.query hoặc từ req.user (nếu đã được xác thực qua middleware)
-        const userId = req.user ? req.user.id : req.query.userId;
+        const userId = req.user.id; // Lấy ID từ người dùng đã xác thực
 
         if (!userId) {
             return res.status(400).json({ message: 'User ID là bắt buộc để gợi ý bữa ăn.' });
@@ -118,6 +163,7 @@ exports.getMealPlanSuggestions = async (req, res) => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
+        // Lấy các mục trong tủ lạnh của người dùng hiện tại
         const userPantryItems = await PantryItem.find({ ownedBy: userId })
             .populate('category', 'name')
             .populate('unit', 'name abbreviation')
@@ -141,6 +187,8 @@ exports.getMealPlanSuggestions = async (req, res) => {
             }
         });
 
+        // Lấy TẤT CẢ các công thức. Nếu công thức là private, bạn có thể muốn lọc theo ownedBy: userId
+        // Hoặc nếu có trường isPublic, bạn có thể lọc theo { $or: [{ ownedBy: userId }, { isPublic: true }] }
         const allRecipes = await Recipe.find()
             .populate('ingredients.category', 'name')
             .populate('ingredients.unit', 'name abbreviation');
@@ -190,14 +238,12 @@ exports.getMealPlanSuggestions = async (req, res) => {
                     missingIngredients: missingIngredients
                 });
             }
-            // Không thêm công thức nếu thiếu quá nhiều hoặc không có gì
         }
 
         // Sắp xếp: ưu tiên công thức có thể làm được hoàn toàn
         suggestedRecipes.sort((a, b) => {
             if (a.status === 'can_make' && b.status !== 'can_make') return -1;
             if (a.status !== 'can_make' && b.status === 'can_make') return 1;
-            // Có thể thêm tiêu chí sắp xếp khác cho 'partially_can_make' (ví dụ: thiếu ít nguyên liệu hơn)
             return 0;
         });
 

@@ -4,12 +4,11 @@ const { PantryItem, User, Unit, FoodCategory } = require('../models/models'); //
 // --- LẤY DANH SÁCH THỰC PHẨM HẾT HẠN ---
 exports.getExpiredPantryItems = async (req, res) => {
     try {
-        // userId có thể đến từ req.query hoặc từ req.user (nếu đã được xác thực qua middleware)
-        const userId = req.user ? req.user.id : req.query.userId;
+        // userId sẽ luôn có từ req.user.id do middleware bảo vệ route
+        const userId = req.user.id;
 
-        if (!userId) {
-            return res.status(400).json({ message: 'User ID là bắt buộc để lấy thực phẩm hết hạn.' });
-        }
+        // Không cần kiểm tra if (!userId) vì authMiddleware.protect đã đảm bảo
+        // Tuy nhiên, có thể thêm log lỗi nếu muốn đảm bảo req.user.id luôn tồn tại ở đây
 
         const expiredItems = await PantryItem.find({
             ownedBy: userId,
@@ -29,13 +28,9 @@ exports.getExpiredPantryItems = async (req, res) => {
 // --- LẤY DANH SÁCH THỰC PHẨM SẮP HẾT HẠN ---
 exports.getExpiringSoonPantryItems = async (req, res) => {
     try {
-        // userId có thể đến từ req.query hoặc từ req.user (nếu đã được xác thực qua middleware)
-        const userId = req.user ? req.user.id : req.query.userId;
+        // userId sẽ luôn có từ req.user.id do middleware bảo vệ route
+        const userId = req.user.id;
         const daysThreshold = parseInt(req.query.daysThreshold) || 7; // Mặc định 7 ngày tới nếu không được chỉ định
-
-        if (!userId) {
-            return res.status(400).json({ message: 'User ID là bắt buộc để lấy thực phẩm sắp hết hạn.' });
-        }
 
         const today = new Date();
         today.setHours(0, 0, 0, 0); // Đặt về đầu ngày hiện tại
@@ -46,7 +41,7 @@ exports.getExpiringSoonPantryItems = async (req, res) => {
         const expiringSoonItems = await PantryItem.find({
             ownedBy: userId,
             expirationDate: {
-                $gt: today, // Lớn hơn ngày hôm nay (không bao gồm hôm nay nếu hôm nay là ngày hết hạn)
+                $gt: today, // Lớn hơn ngày hôm nay
                 $lte: expiringSoonDate // Nhỏ hơn hoặc bằng ngày hết hạn trong ngưỡng
             }
         })
@@ -64,51 +59,65 @@ exports.getExpiringSoonPantryItems = async (req, res) => {
 // --- TẠO PANTRY ITEM MỚI (CREATE) ---
 exports.createPantryItem = async (req, res) => {
     try {
-        const { name, quantity, unit, expirationDate, location, category, ownedBy } = req.body;
+        const { name, quantity, unit, category, purchaseDate, expirationDate, location } = req.body;
 
-        // Xác thực người dùng sở hữu (ownedBy)
-        const existingUser = await User.findById(ownedBy); // Dùng ownedBy từ body, nhưng trong thực tế nên lấy từ req.user.id
-        if (!existingUser) {
-            return res.status(400).json({ message: 'User not found for ownedBy field.' });
-        }
-        // Xác thực unit và category (tùy chọn nhưng rất nên có)
-        const existingUnit = await Unit.findById(unit);
-        if (!existingUnit) {
-            return res.status(400).json({ message: 'Unit not found.' });
-        }
-        const existingCategory = await FoodCategory.findById(category);
-        if (!existingCategory) {
-            return res.status(400).json({ message: 'Category not found.' });
+        // DEBUG LOG: Kiểm tra req.user và req.user.id
+        console.log("DEBUG: req.user:", req.user);
+        console.log("DEBUG: req.user.id:", req.user ? req.user.id : "No user ID");
+
+        // Đảm bảo req.user được thiết lập bởi authMiddleware (đã được đảm bảo bởi protect middleware)
+        if (!req.user || !req.user.id) {
+            console.error("Lỗi: Người dùng không xác thực hoặc thiếu ID người dùng (Lẽ ra đã được xử lý bởi middleware).");
+            return res.status(401).json({ message: 'User not authenticated or user ID missing.' });
         }
 
         const newPantryItem = new PantryItem({
-            name, quantity, unit, expirationDate, location, category, ownedBy
+            name,
+            quantity,
+            unit,
+            category,
+            purchaseDate,
+            expirationDate,
+            location,
+            ownedBy: req.user.id // Gán pantry item cho người dùng hiện tại
         });
-        const savedItem = await newPantryItem.save();
-        res.status(201).json(savedItem);
+
+        // DEBUG LOG: Kiểm tra đối tượng PantryItem trước khi lưu
+        console.log("DEBUG: newPantryItem before save:", newPantryItem);
+
+        const savedPantryItem = await newPantryItem.save();
+
+        res.status(201).json(savedPantryItem);
     } catch (error) {
-        // Xử lý lỗi validation hoặc lỗi database khác
-        res.status(500).json({ message: error.message });
+        // DEBUG LOG: Ghi lại TOÀN BỘ đối tượng lỗi
+        console.error("Error creating pantry item:", error);
+        // Kiểm tra xem lỗi có phải là lỗi validation Mongoose không
+        if (error.name === 'ValidationError') {
+            const errors = {};
+            for (const field in error.errors) {
+                errors[field] = error.errors[field].message;
+            }
+            return res.status(400).json({ message: 'Lỗi xác thực dữ liệu', errors });
+        }
+
+        res.status(500).json({ message: error.message || 'Lỗi server khi tạo thực phẩm trong kho.' });
     }
 };
 
-// --- LẤY TẤT CẢ PANTRY ITEMS HOẶC THEO NGƯỜI DÙNG (READ ALL/BY USER) ---
+// --- LẤY TẤT CẢ PANTRY ITEMS CỦA NGƯỜI DÙNG (READ ALL) ---
 exports.getPantryItems = async (req, res) => {
     try {
-        // Lấy userId từ query hoặc từ thông tin người dùng đã xác thực
-        const userId = req.user ? req.user.id : req.query.userId;
-        let query = {};
-        if (userId) {
-            query.ownedBy = userId; // Lọc theo người sở hữu
-        }
+        // Lấy userId từ thông tin người dùng đã xác thực (req.user.id)
+        const userId = req.user.id;
 
-        const pantryItems = await PantryItem.find(query)
+        const pantryItems = await PantryItem.find({ ownedBy: userId }) // <-- Lọc theo người sở hữu
             .populate('unit', 'name abbreviation')
             .populate('category', 'name')
             .populate('ownedBy', 'username fullName'); // Populate thông tin người sở hữu
         res.status(200).json(pantryItems);
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        console.error("Error getting pantry items:", error); // Thêm log lỗi
+        res.status(500).json({ message: error.message || 'Đã xảy ra lỗi máy chủ.' });
     }
 };
 
@@ -122,41 +131,73 @@ exports.getPantryItemById = async (req, res) => {
         if (!pantryItem) {
             return res.status(404).json({ message: 'Pantry item not found' });
         }
+
+        // KIỂM TRA QUYỀN SỞ HỮU: Chỉ chủ sở hữu mới có thể xem chi tiết
+        if (pantryItem.ownedBy.toString() !== req.user.id) {
+            return res.status(403).json({ message: 'Không có quyền truy cập pantry item này.' });
+        }
+
         res.status(200).json(pantryItem);
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        console.error("Error getting pantry item by ID:", error); // Thêm log lỗi
+        res.status(500).json({ message: error.message || 'Đã xảy ra lỗi máy chủ.' });
     }
 };
 
 // --- CẬP NHẬT PANTRY ITEM (UPDATE) ---
 exports.updatePantryItem = async (req, res) => {
     try {
+        // Tìm pantry item trước để kiểm tra quyền sở hữu
+        const pantryItemToUpdate = await PantryItem.findById(req.params.id);
+        if (!pantryItemToUpdate) {
+            return res.status(404).json({ message: 'Pantry item not found' });
+        }
+
+        // KIỂM TRA QUYỀN SỞ HỮU: Chỉ chủ sở hữu mới có thể cập nhật
+        if (pantryItemToUpdate.ownedBy.toString() !== req.user.id) {
+            return res.status(403).json({ message: 'Không có quyền cập nhật pantry item này.' });
+        }
+
         const updatedItem = await PantryItem.findByIdAndUpdate(
             req.params.id,
             req.body,
-            { new: true, runValidators: true } // `new: true` trả về tài liệu đã cập nhật, `runValidators` chạy lại validation schema
+            { new: true, runValidators: true }
         )
             .populate('unit', 'name abbreviation')
             .populate('category', 'name')
             .populate('ownedBy', 'username fullName');
-        if (!updatedItem) {
-            return res.status(404).json({ message: 'Pantry item not found' });
+
+        if (!updatedItem) { // Kiểm tra lại sau update attempt
+            return res.status(404).json({ message: 'Pantry item not found after update attempt.' });
         }
         res.status(200).json(updatedItem);
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        console.error("Error updating pantry item:", error); // Thêm log lỗi
+        res.status(500).json({ message: error.message || 'Đã xảy ra lỗi máy chủ.' });
     }
 };
 
 // --- XÓA PANTRY ITEM (DELETE) ---
 exports.deletePantryItem = async (req, res) => {
     try {
-        const deletedItem = await PantryItem.findByIdAndDelete(req.params.id);
-        if (!deletedItem) {
+        // Tìm pantry item trước để kiểm tra quyền sở hữu
+        const pantryItemToDelete = await PantryItem.findById(req.params.id);
+        if (!pantryItemToDelete) {
             return res.status(404).json({ message: 'Pantry item not found' });
+        }
+
+        // KIỂM TRA QUYỀN SỞ HỮU: Chỉ chủ sở hữu mới có thể xóa
+        if (pantryItemToDelete.ownedBy.toString() !== req.user.id) {
+            return res.status(403).json({ message: 'Không có quyền xóa pantry item này.' });
+        }
+
+        const deletedItem = await PantryItem.findByIdAndDelete(req.params.id);
+        if (!deletedItem) { // Kiểm tra lại, mặc dù đã kiểm tra ở trên
+            return res.status(404).json({ message: 'Pantry item not found after delete attempt.' });
         }
         res.status(200).json({ message: 'Pantry item deleted successfully' });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        console.error("Error deleting pantry item:", error); // Thêm log lỗi
+        res.status(500).json({ message: error.message || 'Đã xảy ra lỗi máy chủ.' });
     }
 };

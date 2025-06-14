@@ -32,12 +32,10 @@ const validateIngredients = async (ingredients) => {
 // 1. Thêm công thức mới (CREATE)
 exports.createRecipe = async (req, res) => {
     try {
-        const { title, instructions, servings, ingredients, createdBy } = req.body;
+        const { title, instructions, servings, ingredients, category, prepTime, cookTime, description } = req.body; // Thêm các trường khác của Recipe nếu có
+        const ownedByUserId = req.user.id; // <-- Lấy ID người dùng từ middleware xác thực
 
-        // Trong một ứng dụng thực tế với JWT, createdBy nên được lấy từ req.user.id sau khi xác thực
-        // const createdByUserId = req.user.id;
-        // Kiểm tra xem người tạo (createdBy) có tồn tại không
-        const existingUser = await User.findById(createdBy); // Tạm thời dùng createdBy từ body
+        const existingUser = await User.findById(ownedByUserId);
         if (!existingUser) {
             return res.status(400).json({ message: 'User not found.' });
         }
@@ -49,25 +47,45 @@ exports.createRecipe = async (req, res) => {
         }
         // --- Kết thúc validation cho ingredients ---
 
-        const newRecipe = new Recipe({ title, instructions, servings, ingredients, createdBy });
+        const newRecipe = new Recipe({
+            title,
+            instructions,
+            servings,
+            ingredients,
+            category,    // <-- Đảm bảo bạn truyền category vào đây nếu nó là required
+            prepTime,    // <-- Đảm bảo bạn truyền prepTime vào đây
+            cookTime,    // <-- Đảm bảo bạn truyền cookTime vào đây
+            description, // <-- Đảm bảo bạn truyền description vào đây
+            ownedBy: ownedByUserId // <-- GÁN ownedBy Ở ĐÂY
+        });
         const savedRecipe = await newRecipe.save();
         res.status(201).json(savedRecipe);
     } catch (error) {
-        // Xử lý lỗi validation hoặc lỗi database khác
-        res.status(500).json({ message: error.message });
+        console.error("Error creating recipe:", error); // Thêm log lỗi chi tiết
+        if (error.name === 'ValidationError') {
+            const errors = {};
+            for (let field in error.errors) {
+                errors[field] = error.errors[field].message;
+            }
+            return res.status(400).json({ message: 'Lỗi xác thực dữ liệu', errors });
+        }
+        res.status(500).json({ message: error.message || 'Đã xảy ra lỗi máy chủ.' });
     }
 };
 
 // 2. Lấy tất cả công thức (READ ALL)
 exports.getRecipes = async (req, res) => {
     try {
-        const recipes = await Recipe.find()
-            .populate('createdBy', 'username fullName') // Populate thông tin người tạo
-            .populate('ingredients.category', 'name')   // Populate thông tin danh mục của từng nguyên liệu
-            .populate('ingredients.unit', 'name abbreviation'); // Populate thông tin đơn vị của từng nguyên liệu
+        // Lọc theo người dùng sở hữu (nếu bạn muốn chỉ người dùng đó xem công thức của họ)
+        // Nếu muốn tất cả người dùng xem, bỏ đoạn { ownedBy: req.user.id }
+        const recipes = await Recipe.find({ ownedBy: req.user.id }) // <-- THAY ĐỔI Ở ĐÂY: Lọc theo ownedBy
+            .populate('ownedBy', 'username fullName') // <-- THAY ĐỔI Ở ĐÂY: Populate 'ownedBy'
+            .populate('ingredients.category', 'name')
+            .populate('ingredients.unit', 'name abbreviation');
         res.status(200).json(recipes);
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        console.error("Error getting recipes:", error); // Thêm log lỗi
+        res.status(500).json({ message: error.message || 'Đã xảy ra lỗi máy chủ.' });
     }
 };
 
@@ -75,25 +93,38 @@ exports.getRecipes = async (req, res) => {
 exports.getRecipeById = async (req, res) => {
     try {
         const recipe = await Recipe.findById(req.params.id)
-            .populate('createdBy', 'username fullName')
+            .populate('ownedBy', 'username fullName') // <-- THAY ĐỔI Ở ĐÂY: Populate 'ownedBy'
             .populate('ingredients.category', 'name')
             .populate('ingredients.unit', 'name abbreviation');
         if (!recipe) {
             return res.status(404).json({ message: 'Recipe not found' });
         }
+        // Tùy chọn: Thêm kiểm tra xem người dùng hiện tại có quyền truy cập công thức này không
+        if (recipe.ownedBy && recipe.ownedBy._id.toString() !== req.user.id) {
+            return res.status(403).json({ message: 'Không có quyền truy cập công thức này.' });
+        }
         res.status(200).json(recipe);
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        console.error("Error getting recipe by ID:", error); // Thêm log lỗi
+        res.status(500).json({ message: error.message || 'Đã xảy ra lỗi máy chủ.' });
     }
 };
 
 // 4. Cập nhật công thức (UPDATE)
 exports.updateRecipe = async (req, res) => {
     try {
-        // Lấy dữ liệu cập nhật từ req.body
         const updates = req.body;
 
-        // Nếu có trường 'ingredients' trong updates, thì chạy validation
+        // Kiểm tra xem người dùng hiện tại có quyền chỉnh sửa công thức này không
+        const recipeToUpdate = await Recipe.findById(req.params.id);
+        if (!recipeToUpdate) {
+            return res.status(404).json({ message: 'Recipe not found' });
+        }
+        // Đảm bảo chỉ chủ sở hữu mới có thể cập nhật
+        if (recipeToUpdate.ownedBy.toString() !== req.user.id) {
+            return res.status(403).json({ message: 'Không có quyền cập nhật công thức này.' });
+        }
+
         if (updates.ingredients) {
             const { isValid, message } = await validateIngredients(updates.ingredients);
             if (!isValid) {
@@ -103,30 +134,42 @@ exports.updateRecipe = async (req, res) => {
 
         const updatedRecipe = await Recipe.findByIdAndUpdate(
             req.params.id,
-            updates, // Sử dụng updates từ req.body
-            { new: true, runValidators: true } // `new: true` trả về tài liệu đã cập nhật, `runValidators` chạy lại validation schema
+            updates,
+            { new: true, runValidators: true }
         )
-            .populate('createdBy', 'username fullName')
+            .populate('ownedBy', 'username fullName') // <-- THAY ĐỔI Ở ĐÂY: Populate 'ownedBy'
             .populate('ingredients.category', 'name')
             .populate('ingredients.unit', 'name abbreviation');
-        if (!updatedRecipe) {
-            return res.status(404).json({ message: 'Recipe not found' });
+
+        if (!updatedRecipe) { // Kiểm tra lại sau populate
+            return res.status(404).json({ message: 'Recipe not found after update attempt.' });
         }
         res.status(200).json(updatedRecipe);
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        console.error("Error updating recipe:", error); // Thêm log lỗi
+        res.status(500).json({ message: error.message || 'Đã xảy ra lỗi máy chủ.' });
     }
 };
 
 // 5. Xóa công thức (DELETE)
 exports.deleteRecipe = async (req, res) => {
     try {
-        const deletedRecipe = await Recipe.findByIdAndDelete(req.params.id);
-        if (!deletedRecipe) {
+        // Kiểm tra quyền sở hữu trước khi xóa
+        const recipeToDelete = await Recipe.findById(req.params.id);
+        if (!recipeToDelete) {
             return res.status(404).json({ message: 'Recipe not found' });
+        }
+        if (recipeToDelete.ownedBy.toString() !== req.user.id) {
+            return res.status(403).json({ message: 'Không có quyền xóa công thức này.' });
+        }
+
+        const deletedRecipe = await Recipe.findByIdAndDelete(req.params.id);
+        if (!deletedRecipe) { // Nên không cần kiểm tra này nếu kiểm tra quyền sở hữu đã pass
+            return res.status(404).json({ message: 'Recipe not found after delete attempt.' });
         }
         res.status(200).json({ message: 'Recipe deleted successfully' });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        console.error("Error deleting recipe:", error); // Thêm log lỗi
+        res.status(500).json({ message: error.message || 'Đã xảy ra lỗi máy chủ.' });
     }
 };
