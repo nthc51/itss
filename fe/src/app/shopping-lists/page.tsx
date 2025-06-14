@@ -35,7 +35,7 @@ import { useToast } from "@/components/ui/use-toast";
 interface ShoppingItem {
   _id: string;
   name: string;
-  quantity: number;
+  quantity: number; 
   unit: string; // unit ObjectId
   category: string; // category ObjectId
   status: string; // "PENDING" | "BOUGHT"
